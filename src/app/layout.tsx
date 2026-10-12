@@ -1,11 +1,52 @@
 import './globals.css'
 import PwaRegister from '@/components/PwaRegister'
-import {I18nProvider} from '@/lib/i18n'
-import type {Metadata,Viewport} from 'next'
-import {Sora,Inter,Noto_Sans_Ethiopic} from 'next/font/google'
-const d=Sora({subsets:['latin'],weight:["600","700"],variable:'--font-display'})
-const s=Inter({subsets:['latin'],variable:'--font-sans'})
-const e=Noto_Sans_Ethiopic({subsets:['ethiopic'],variable:'--font-am'})
-export const metadata:Metadata={title:'Game Zone Counter',description:'Live counters for game zones',manifest:'/manifest.webmanifest',icons:{apple:'/icon-192.png'}}
-export const viewport:Viewport={width:'device-width',initialScale:1,themeColor:'#120D0C'}
-export default function L({children}:{children:React.ReactNode}){return <html lang="en"><body className={`${d.variable} ${s.variable} ${e.variable} font-sans`}><I18nProvider>{children}</I18nProvider><PwaRegister/></body></html>}
+import { I18nProvider } from '@/lib/i18n'
+import type { Metadata, Viewport } from 'next'
+import { Sora, Inter, Noto_Sans_Ethiopic } from 'next/font/google'
+
+const soraFont = Sora({
+  subsets: ['latin'],
+  weight: ['600', '700', '800'],
+  variable: '--font-display',
+  display: 'swap',
+})
+
+const interFont = Inter({
+  subsets: ['latin'],
+  variable: '--font-sans',
+  display: 'swap',
+})
+
+const ethiopicFont = Noto_Sans_Ethiopic({
+  subsets: ['ethiopic'],
+  variable: '--font-am',
+  display: 'swap',
+})
+
+export const metadata: Metadata = {
+  title: 'Blackout Game Zone — Counter & Tournament Hub',
+  description: 'Luxury live console counter, shifts, inventory, finance, and tournament management for PlayStation game zones.',
+  manifest: '/manifest.webmanifest',
+  icons: { apple: '/icon-192.png' },
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#080B11',
+}
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en" className="dark">
+      <body
+        className={`${soraFont.variable} ${interFont.variable} ${ethiopicFont.variable} font-sans bg-bg text-ink antialiased selection:bg-brand selection:text-bg`}
+      >
+        <I18nProvider>
+          {children}
+        </I18nProvider>
+        <PwaRegister />
+      </body>
+    </html>
+  )
+}

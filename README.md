@@ -1,29 +1,177 @@
-# Game Zone Counter (v1 core)
-Next.js 15 + Supabase. Warm black and crimson UI, mobile-first.
+# Blackout Game Zone Counter — Production Hub
 
-## Setup
-1. Create a Supabase project. Run `supabase/migrations/001_core.sql` in the SQL editor.
-2. Copy `.env.example` to `.env.local` and fill the URL and anon key (Project Settings > API).
-3. `npm install && npm run dev`, deploy to Vercel with the same two env vars.
+**Next.js 15 + Supabase PostgreSQL + TypeScript + Tailwind CSS**
 
-## First account (only one SQL step)
-1. Run `002_limits.sql`, `003_shifts.sql` and `004_finance.sql` and `005_snacks.sql` `006_account.sql` and `007_admin_tools.sql` and `008_reopen_handover.sql` and `009_notifications_pricing_reports.sql` too. In Supabase Auth settings, set the Site URL to your deployed domain and add `https://YOUR-DOMAIN/reset` to Redirect URLs; configure custom SMTP (Resend works) so reset emails are delivered. Add `SUPABASE_SERVICE_ROLE_KEY` to `.env.local` and Vercel (server only, never expose it).
-2. Supabase > Authentication > add user `you@mail.com` (auto-confirm), then:
-```sql
-insert into profiles(id,role,full_name) select id,'super_admin','Platform owner' from auth.users where email='you@mail.com';
+The **Blackout Game Zone Counter** is an enterprise-grade, mobile-first management system designed specifically for commercial PlayStation 4, PlayStation 5, and billiards game zones. It features a luxury dark obsidian and champagne gold aesthetic, real-time live floor tracking, exact financial accounting in Ethiopian Birr (ETB), durable offline operation via IndexedDB, and a full single-elimination tournament management module.
+
+---
+
+## 1. System Architecture & Tech Stack
+
+- **Framework**: Next.js 15 (App Router)
+- **Language**: TypeScript 5.7
+- **Styling**: Tailwind CSS with custom Blackout design tokens (`#080B11` deep navy/black, `#D4AF37` champagne gold, PlayStation geometry)
+- **Database & Auth**: Supabase PostgreSQL with Row Level Security (RLS) and Realtime WebSocket engine
+- **Offline Engine**: IndexedDB with idempotency keys, automatic retry backoff, and local state caching
+- **Testing**: Vitest automated test suite with full coverage for financial math, bracket generation, rate limiting, and session rules
+- **Deployment**: Vercel Serverless / PWA installable
+
+---
+
+## 2. Complete Database Migration Sequence
+
+All schema definitions, functions, and RLS policies are forward-only and safe for production installations. Run these migrations in order in the Supabase SQL Editor:
+
+1. `supabase/migrations/001_core.sql`: Core tables (`game_zones`, `profiles`, `stations`, `shifts`, `sessions`, `session_events`, `audit_logs`), base RLS policies, and core session RPCs.
+2. `supabase/migrations/002_limits.sql`: DB triggers enforcing station limits and employee limits per game zone plan.
+3. `supabase/migrations/003_shifts.sql`: Shift open, verification, and settlement workflow.
+4. `supabase/migrations/004_finance.sql`: One-time expenses, recurring monthly expenses, and profit report RPCs.
+5. `supabase/migrations/005_snacks.sql`: Inventory items catalog, snack sales, and profit margin tracking.
+6. `supabase/migrations/006_account.sql`: User profile update RPCs.
+7. `supabase/migrations/007_admin_tools.sql`: Session edits, voids, and audit logging with mandatory justifications.
+8. `supabase/migrations/008_reopen_handover.sql`: Reopen session window and employee-to-employee shift handover.
+9. `supabase/migrations/009_notifications_pricing_reports.sql`: In-app notification triggers, unit type prices, and employee shift reports.
+10. `supabase/migrations/010_business_settings_and_rules.sql`: Configurable business rules, FIFA tie-break policies, reopen window customization, and shift conflict resolution.
+11. `supabase/migrations/011_session_lifecycle_and_idempotency.sql`: Console pause/resume, FIFA extra time and penalty surcharges, and server-side idempotency keys.
+12. `supabase/migrations/012_tournaments.sql`: Tournaments schema, participant registration, single-elimination bracket generation, match scoring, and prize accounting.
+
+---
+
+## 3. Environment Variables Configuration
+
+Copy `.env.example` to `.env.local` for local execution or enter into Vercel Project Settings:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
-3. Sign in at `/login` > `/super`: add owners (zone, limits). Owners use `/manage` for units, prices and employees. Employees sign in with a username.
 
-## Built
-Amharic: login, employee counter, My day and snack sheet (switch language on the login screen or in Account). Ethiopian calendar option (Account) shows Ethiopian dates beside date pickers in History and Finance. Owner pages are still English.
-Alerts bell with live in-app notifications (day submitted, day settled or sent back, low stock) and optional phone alerts while the app is open (not when fully closed), PDF export (opens print dialog, choose Save as PDF), per-employee breakdown in Finance, price per game by unit type with optional per-unit price.
-Reopen a just-ended session (5 minutes), hand an open session to a colleague, offline queue for +1/-1 and End (starting sessions and snack sales need a connection), installable PWA (open the site over HTTPS, then use the browser menu: Add to Home screen).
-History (owner edits or voids past sessions and snack sales with a required reason; settled days locked), Settings (zone name and location), Audit log viewer, forced password change on first login, suspended or closed zones blocked at the database and at login.
-Account page (edit name, change password, sign out everywhere, owner delete-zone), forgot/reset password, owner resets employee passwords, security headers.
-Snacks: owner Inventory (price, cost, stock, low-stock alert), employee snack sales (added to a session or paid on the spot), shift cash and profit include snacks and their cost.
-Finance page: today/week/month/custom profit and loss, breakdowns by unit type, payment method and expense, daily bars, expenses (add/edit/soft-delete, audited), monthly recurring expenses, CSV export.
-Employee My day (per-unit sessions, totals by payment method), close day with cash count and variance, owner Settle/Send back, audit log for shifts.
-Super Admin console (owners, limits, suspend), owner Manage page (units, prices, employees, deactivate), DB-enforced limits.
-Auth + role redirect, schema with RLS, race-safe RPCs (start/+1/-1/end with price snapshot, idempotent taps, one open session per unit), employee counter, admin live monitor with Realtime.
-## Next (per spec)
-Super Admin console, zone/unit/employee management (Edge Function for employee creation), snacks, shift close and verification, expenses and P&L, account deletion, offline queue, Amharic.
+> **Security Note**: `SUPABASE_SERVICE_ROLE_KEY` is exclusively utilized by server-side routes (`/api/users`) and is never leaked to browser bundles.
+
+---
+
+## 4. Initial Provisioning & User Roles
+
+The system enforces three strict roles:
+
+1. **Platform Super-Admin (`super_admin`)**: Manages game zone business tenants and quota limits at `/super`.
+   Provision your first super-admin directly in Supabase SQL:
+   ```sql
+   insert into profiles(id, role, full_name)
+   select id, 'super_admin', 'Platform Super Admin'
+   from auth.users where email = 'admin@yourcompany.com';
+   ```
+
+2. **Game Zone Owner (`admin`)**:
+   - Manages console stations and prices at `/manage`.
+   - Monitors live consoles in real-time at `/monitor`.
+   - Reviews and settles employee shifts.
+   - Configures FIFA extra-time and business rules at `/settings`.
+   - Accesses financial reports, exports CSVs, and logs expenses at `/finance`.
+   - Creates and manages tournaments at `/tournaments`.
+
+3. **Game Zone Employee (`employee`)**:
+   - Accesses high-speed mobile counter at `/counter`.
+   - Starts sessions, records games, pauses consoles, and adds snacks.
+   - Reconciles cash drawer and submits daily closeout at `/counter/day`.
+
+---
+
+## 5. Offline Operation & Durable Synchronization
+
+The application operates seamlessly under weak or disconnected mobile internet:
+
+- **Durable Action Queue**: Actions (`adjust_session`, `pause_session`, `resume_session`, `end_session_idempotent`, `add_sale_idempotent`) are persisted in browser **IndexedDB** (`gz_offline_db`).
+- **Idempotency**: Every state-changing network request includes a unique UUID idempotency key. Duplicate network requests or retries will never produce duplicate charges or increment game counters twice.
+- **Connection Indicator (`NetBanner`)**: Displays real-time sync state (`Online & Synced`, `Offline Mode`, `Syncing`, `Sync Conflict`).
+- **Local Snapshot Cache**: Active sessions, station list, and snack menu are preserved locally across browser refreshes.
+
+---
+
+## 6. Financial Accuracy & Accounting Standards
+
+- **Exact Currency Precision**: Financial math is calculated with cents precision in `src/lib/finance.ts` (`addMoney`, `subMoney`, `multiplyMoney`, `calculateNetProfit`) to completely eliminate JavaScript floating-point errors (e.g. `0.1 + 0.2`).
+- **P&L Reporting**:
+  - `Gross Revenue`: Game session revenue + Snack revenue.
+  - `Cost of Goods Sold (COGS)`: Cost price of snacks sold.
+  - `Operating Expenses`: Rent, electricity, salaries, repairs, and recurring bills.
+  - `Net Operating Profit`: Gross Revenue - COGS - Expenses.
+- **Cash Reconciliation**: Digital payments (Telebirr, CBE Bank Transfer) are strictly isolated from physical expected cash during shift closeout.
+
+---
+
+## 7. FIFA & EA FC Tie-Break Rules
+
+Game zone owners can configure how tied matches are billed without writing code (via `/settings`):
+- **Free**: Extra time and penalty shootouts are included in the regular game price.
+- **50% Discount**: Charged at half of the station's unit price.
+- **Full Match**: Charged at the full match price.
+- **Flat Fee**: Charged at a fixed configurable ETB amount.
+
+---
+
+## 8. Tournament Management Module
+
+Located at `/tournaments`:
+- **Creation**: Support for title, game (EA FC 25, Tekken, etc.), console kind, entry fee, prize pool, organizer expenses, and custom rules.
+- **Roster & Registration**: Employee and owner registration with payment recording (Cash, Telebirr, CBE) and fee status.
+- **Single-Elimination Brackets**: Automatic seed and bye computation, interactive mobile-responsive bracket view, match scoring, and walkover recording.
+- **Tournament Accounting**: Tracks registered vs paid players, gross entry fees collected, prize obligations, and final net profit.
+
+---
+
+## 9. Automated Testing Guide
+
+Run the full automated test suite:
+
+```bash
+npm test
+```
+
+Test coverage includes:
+- `src/test/finance.test.ts`: Float drift elimination, ETB formatting, P&L calculations, shift variance.
+- `src/test/tournaments.test.ts`: Single-elimination bracket sizing, bye distribution, score validations, prize accounting.
+- `src/test/fifaRules.test.ts`: FIFA extra-time and penalty surcharge calculations.
+- `src/test/rateLimit.test.ts`: API route sliding window abuse protection.
+- `src/test/sessionRules.test.ts`: Session lifecycle, reopen window boundaries, price snapshot preservation.
+
+---
+
+## 10. Local Development & Deployment
+
+### Run Locally
+```bash
+npm install
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### Production Build Check
+```bash
+npm run build
+```
+
+### Vercel Deployment
+1. Connect your Git repository to Vercel.
+2. In Project Settings > Environment Variables, add:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+3. Deploy. The PWA service worker and manifest (`/manifest.webmanifest`) enable full mobile home screen installation over HTTPS.
+
+---
+
+## 11. Database Backup & Disaster Recovery Runbook
+
+### Backup (Daily / Weekly)
+Using PostgreSQL standard tooling (`pg_dump`):
+```bash
+pg_dump -h db.YOUR_PROJECT.supabase.co -U postgres -d postgres -F c -b -v -f blackout_backup_$(date +%Y%m%d).dump
+```
+
+### Restore
+In the event of a critical recovery requirement:
+```bash
+pg_restore -h db.YOUR_PROJECT.supabase.co -U postgres -d postgres -v --clean --if-exists blackout_backup_YYYYMMDD.dump
+```

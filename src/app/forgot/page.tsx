@@ -1,8 +1,97 @@
 'use client'
-import {useState} from 'react'
-import {sb} from '@/lib/supabase'
-export default function Forgot(){const [e,setE]=useState(''),[sent,setS]=useState(false),[b,setB]=useState(false)
-return <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-6"><h1 className="font-display text-3xl font-bold">Reset password</h1>
-{sent?<p className="mt-4 text-ink/70">If that email has an account, a reset link is on its way. Check your inbox.</p>:<form onSubmit={async ev=>{ev.preventDefault();setB(true);await sb.auth.resetPasswordForEmail(e.trim(),{redirectTo:`${location.origin}/reset`});setS(true)}} className="mt-4 space-y-3">
-<p className="text-sm text-ink/60">Owners can reset by email. Employees: ask your owner to set a new password.</p><input required type="email" value={e} onChange={x=>setE(x.target.value)} placeholder="Email" className="inp"/><button disabled={b} className="btn brand w-full">Send reset link</button></form>}
-<a href="/login" className="mt-6 text-brand underline">Back to sign in</a></main>}
+
+import React, { useState } from 'react'
+import Link from 'next/link'
+import { sb } from '@/lib/supabase'
+import { PlayStationSymbolsRow } from '@/components/PlayStationIcons'
+
+export default function ForgotPasswordPage() {
+  const [email, setEmail] = useState('')
+  const [sent, setSent] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    setErr('')
+
+    try {
+      const { error } = await sb.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/reset`,
+      })
+      setBusy(false)
+      if (error) {
+        setErr(error.message)
+      } else {
+        setSent(true)
+      }
+    } catch {
+      setBusy(false)
+      setErr('Failed to request password reset.')
+    }
+  }
+
+  return (
+    <main className="flex min-h-dvh flex-col items-center justify-center px-4 py-8 bg-bg relative">
+      <div className="w-full max-w-sm space-y-6">
+        <div className="text-center space-y-2">
+          <h1 className="font-display text-3xl font-extrabold text-ink">Reset Password</h1>
+          <p className="text-xs text-ink-muted">
+            Game zone owners can receive a secure password recovery link
+          </p>
+          <div className="flex justify-center pt-1">
+            <PlayStationSymbolsRow />
+          </div>
+        </div>
+
+        <div className="surface-card p-6 shadow-2xl space-y-4">
+          {err && (
+            <div role="alert" className="rounded-xl border border-bad/40 bg-bad/10 p-3 text-xs text-bad">
+              {err}
+            </div>
+          )}
+
+          {sent ? (
+            <div className="rounded-2xl border border-ok/40 bg-ok/10 p-4 text-center space-y-2">
+              <span className="text-2xl text-ok">✉️</span>
+              <p className="text-sm font-bold text-ok">Reset Link Sent</p>
+              <p className="text-xs text-ink-muted">
+                If that email exists in our records, instructions have been dispatched. Check your inbox and spam folder.
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={handleReset} className="space-y-4">
+              <p className="text-xs text-ink-muted leading-relaxed">
+                Note: Employees should ask their game zone owner to reset their password directly from the Staff Management screen.
+              </p>
+              <div>
+                <label className="block text-xs font-semibold text-ink-muted mb-1">
+                  Owner Email Address
+                </label>
+                <input
+                  required
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="owner@example.com"
+                  className="inp"
+                />
+              </div>
+
+              <button disabled={busy} className="btn btn-gold w-full">
+                {busy ? 'Sending…' : 'Send Recovery Link'}
+              </button>
+            </form>
+          )}
+
+          <div className="text-center pt-2">
+            <Link href="/login" className="text-xs text-brand hover:underline font-semibold">
+              ← Back to Sign In
+            </Link>
+          </div>
+        </div>
+      </div>
+    </main>
+  )
+}

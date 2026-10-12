@@ -1,16 +1,164 @@
 'use client'
-import {useCallback,useEffect,useState} from 'react'
-import {sb} from '@/lib/supabase'
-type N={id:string;title:string;body:string|null;read_at:string|null;created_at:string}
-export default function Bell(){const [n,setN]=useState<N[]>([]),[open,setOpen]=useState(false),[perm,setPerm]=useState('default')
-const load=useCallback(async()=>{const {data}=await sb.from('notifications').select('id,title,body,read_at,created_at').order('created_at',{ascending:false}).limit(30);setN((data as N[])||[])},[])
-useEffect(()=>{if('Notification' in window)setPerm(Notification.permission);let c:ReturnType<typeof sb.channel>|null=null
-sb.auth.getUser().then(({data:{user}})=>{if(!user)return;load();c=sb.channel('notif').on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications',filter:`user_id=eq.${user.id}`},p=>{const x=p.new as N;setN(o=>[x,...o]);if('Notification' in window&&Notification.permission==='granted')new Notification(x.title,{body:x.body??'',icon:'/icon-192.png'})}).subscribe()})
-return()=>{if(c)sb.removeChannel(c)}},[load])
-const unread=n.filter(x=>!x.read_at).length
-return <div className="relative inline-block"><button aria-label={`Alerts, ${unread} unread`} onClick={()=>setOpen(!open)} className="rounded-xl border border-line px-3 py-2 text-sm">Alerts{!!unread&&<span className="ml-1 rounded-full bg-brand px-1.5 text-xs text-white">{unread}</span>}</button>
-{open&&<div className="absolute right-0 z-20 mt-2 max-h-80 w-72 overflow-y-auto rounded-2xl border border-line bg-surface p-3 text-left shadow-xl">
-<div className="mb-2 flex justify-between text-xs"><button onClick={async()=>{await sb.from('notifications').update({read_at:new Date().toISOString()}).is('read_at',null);load()}} className="text-brand underline">Mark all read</button>
-{'Notification' in window&&perm==='default'&&<button onClick={async()=>setPerm(await Notification.requestPermission())} className="text-brand underline">Turn on phone alerts</button>}</div>
-{n.map(x=><div key={x.id} className="border-t border-line py-2 text-sm"><p className={x.read_at?'':'font-semibold'}>{x.title}</p>{x.body&&<p className="text-ink/60">{x.body}</p>}<p className="text-xs text-ink/40">{new Date(x.created_at).toLocaleString()}</p></div>)}
-{!n.length&&<p className="text-sm text-ink/60">No alerts yet.</p>}</div>}</div>}
+
+import { useCallback, useEffect, useState } from 'react'
+import { sb } from '@/lib/supabase'
+
+interface NotificationItem {
+  id: string
+  title: string
+  body: string | null
+  read_at: string | null
+  created_at: string
+}
+
+export default function Bell() {
+  const [notifications, setNotifications] = useState<NotificationItem[]>([])
+  const [open, setOpen] = useState(false)
+  const [perm, setPerm] = useState('default')
+
+  const load = useCallback(async () => {
+    const { data } = await sb
+      .from('notifications')
+      .select('id,title,body,read_at,created_at')
+      .order('created_at', { ascending: false })
+      .limit(30)
+    setNotifications((data as NotificationItem[]) || [])
+  }, [])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setPerm(Notification.permission)
+    }
+
+    let channel: ReturnType<typeof sb.channel> | null = null
+
+    sb.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      load()
+
+      channel = sb
+        .channel('user-notifications')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload) => {
+            const newItem = payload.new as NotificationItem
+            setNotifications((prev) => [newItem, ...prev])
+            if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+              new Notification(newItem.title, {
+                body: newItem.body ?? '',
+                icon: '/icon-192.png',
+              })
+            }
+          }
+        )
+        .subscribe()
+    })
+
+    return () => {
+      if (channel) sb.removeChannel(channel)
+    }
+  }, [load])
+
+  const unreadCount = notifications.filter((x) => !x.read_at).length
+
+  const markAllRead = async () => {
+    await sb
+      .from('notifications')
+      .update({ read_at: new Date().toISOString() })
+      .is('read_at', null)
+    load()
+  }
+
+  const requestPhoneAlerts = async () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      const res = await Notification.requestPermission()
+      setPerm(res)
+    }
+  }
+
+  return (
+    <div className="relative inline-block">
+      <button
+        aria-label={`Notifications, ${unreadCount} unread`}
+        onClick={() => setOpen(!open)}
+        className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface hover:border-brand/50 text-ink transition-colors"
+      >
+        <span className="text-base">🔔</span>
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-bold text-bg shadow-glow-sm animate-pulse">
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 z-50 mt-2 w-80 max-h-96 overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-line p-3.5 bg-surface-elevated/50">
+            <h3 className="font-display text-sm font-bold text-ink">Notifications</h3>
+            {unreadCount > 0 && (
+              <button
+                onClick={markAllRead}
+                className="text-xs font-semibold text-brand hover:underline"
+              >
+                Mark all read
+              </button>
+            )}
+          </div>
+
+          {/* List */}
+          <div className="max-h-72 overflow-y-auto divide-y divide-line/60">
+            {notifications.map((item) => (
+              <div
+                key={item.id}
+                className={`p-3.5 text-xs transition-colors hover:bg-surface-elevated ${
+                  !item.read_at ? 'bg-surface-elevated/40' : ''
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className={`font-semibold text-ink ${!item.read_at ? 'text-brand' : ''}`}>
+                    {item.title}
+                  </p>
+                  {!item.read_at && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-brand shrink-0 mt-1" />
+                  )}
+                </div>
+                {item.body && <p className="mt-1 text-ink/70 leading-relaxed">{item.body}</p>}
+                <p className="mt-1.5 text-[10px] text-ink/40">
+                  {new Date(item.created_at).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </p>
+              </div>
+            ))}
+
+            {notifications.length === 0 && (
+              <div className="p-8 text-center text-xs text-ink/50">
+                <span>No alerts yet. Everything is quiet.</span>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          {typeof window !== 'undefined' && 'Notification' in window && perm === 'default' && (
+            <div className="border-t border-line p-2 text-center bg-surface-elevated/40">
+              <button
+                onClick={requestPhoneAlerts}
+                className="text-xs font-bold text-brand hover:underline"
+              >
+                Enable browser alerts
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}

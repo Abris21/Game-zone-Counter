@@ -1,10 +1,174 @@
-@tailwind base;@tailwind components;@tailwind utilities;
-:root{color-scheme:dark}
-body{background:radial-gradient(900px 500px at 50% -15%,#3a1218 0,#120D0C 65%) fixed;color:#F3E9E4;min-height:100dvh}
-input,select{color:#F3E9E4}input::placeholder{color:#F3E9E4;opacity:.45}select option{background:#1C1514}
-.btn{min-height:52px;border-radius:14px;font-weight:600;transition:transform .08s,background .2s}
-.btn:active{transform:scale(.96)}
-.btn:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #FF6B80;outline-offset:2px}
-.brand{background:#C8243B;color:#fff}.brand:hover{background:#A91D31}
-.inp{height:48px;width:100%;border-radius:12px;border:1px solid #3A2B2D;background:#1C1514;padding:0 12px}
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --bg-primary: #080B11;
+  --bg-surface: #111622;
+  --bg-elevated: #182032;
+  --color-gold: #D4AF37;
+  --color-gold-hover: #E5C453;
+  --border-subtle: #232D42;
+  --border-gold: #544622;
+}
+
+body {
+  background-color: #080B11;
+  background-image: 
+    radial-gradient(1200px 600px at 50% -10%, rgba(212, 175, 55, 0.08) 0%, transparent 70%),
+    radial-gradient(800px 400px at 85% 90%, rgba(0, 67, 156, 0.06) 0%, transparent 60%);
+  background-attachment: fixed;
+  color: #F8FAFC;
+  min-height: 100dvh;
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Custom sleek scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0B0E17;
+}
+::-webkit-scrollbar-thumb {
+  background: #232D42;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3A4763;
+}
+
+input, select, textarea {
+  color: #F8FAFC;
+}
+input::placeholder, textarea::placeholder {
+  color: #64748B;
+}
+select option {
+  background-color: #111622;
+  color: #F8FAFC;
+}
+
+/* Base button styles with subtle micro-interactions */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 48px;
+  padding: 0.5rem 1.25rem;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  transition: all 0.15s ease-in-out;
+  cursor: pointer;
+  user-select: none;
+}
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.btn:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid #D4AF37;
+  outline-offset: 2px;
+}
+
+/* Brand Button - Luxury Champagne Gold */
+.btn-gold, .btn.brand {
+  background: linear-gradient(135deg, #E5C453 0%, #D4AF37 100%);
+  color: #080B11;
+  font-weight: 700;
+  border: 1px solid #FAF4E3;
+  box-shadow: 0 2px 10px -2px rgba(212, 175, 55, 0.3);
+}
+.btn-gold:hover:not(:disabled), .btn.brand:hover:not(:disabled) {
+  background: linear-gradient(135deg, #F3E5AB 0%, #E5C453 100%);
+  box-shadow: 0 4px 16px -2px rgba(212, 175, 55, 0.45);
+}
+.btn-gold:disabled, .btn.brand:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Secondary / Surface Button */
+.btn-secondary {
+  background: #182032;
+  border: 1px solid #232D42;
+  color: #F8FAFC;
+}
+.btn-secondary:hover:not(:disabled) {
+  background: #202A42;
+  border-color: #3A4763;
+}
+
+/* Outline Gold Button */
+.btn-outline-gold {
+  background: rgba(212, 175, 55, 0.05);
+  border: 1px solid rgba(212, 175, 55, 0.4);
+  color: #D4AF37;
+}
+.btn-outline-gold:hover:not(:disabled) {
+  background: rgba(212, 175, 55, 0.12);
+  border-color: #D4AF37;
+}
+
+/* Input standard class */
+.inp {
+  height: 48px;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid #232D42;
+  background: #111622;
+  padding: 0 14px;
+  font-size: 0.9375rem;
+  color: #F8FAFC;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.inp:focus {
+  border-color: #D4AF37;
+  background: #141A28;
+}
+
+/* Card surfaces */
+.surface-card {
+  background: #111622;
+  border: 1px solid #232D42;
+  border-radius: 16px;
+}
+.surface-card-hover {
+  background: #111622;
+  border: 1px solid #232D42;
+  border-radius: 16px;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+.surface-card-hover:hover {
+  border-color: #3A4763;
+  transform: translateY(-1px);
+}
+
+.surface-card-gold {
+  background: #111622;
+  border: 1px solid #544622;
+  border-radius: 16px;
+  box-shadow: 0 0 15px -3px rgba(212, 175, 55, 0.08);
+}
+
+/* PlayStation Symbol accents */
+.ps-symbol {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-family: monospace;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

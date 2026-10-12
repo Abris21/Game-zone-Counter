@@ -1,56 +1,643 @@
 'use client'
-import {useCallback,useEffect,useState} from 'react'
-import {useRouter} from 'next/navigation'
-import {sb,msg,etb} from '@/lib/supabase'
+
+import React, { useCallback, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { sb, msg, etb } from '@/lib/supabase'
+import { useAuthGuard } from '@/lib/auth'
+import AppLayout from '@/components/AppLayout'
 import EthDate from '@/components/EthDate'
-type R={revenue:number;games:number;expenses:number;by_method:Record<string,number>;by_kind:Record<string,number>;by_category:Record<string,number>;daily:{day:string;revenue:number;expenses:number}[]}
-type Ex={id:string;category:string;amount:number;expense_date:string;note:string|null};type Rx={id:string;category:string;amount:number;day_of_month:number}
-const f=(d:Date)=>d.toLocaleDateString('en-CA'),CATS=['Rent','Electricity','Maintenance','Salary','Other']
-const rng=(p:string)=>{const n=new Date(),w=new Date(n);w.setDate(n.getDate()-((n.getDay()+6)%7));return p==='today'?[f(n),f(n)]:p==='week'?[f(w),f(n)]:[f(new Date(n.getFullYear(),n.getMonth(),1)),f(n)]}
-export default function Finance(){const r=useRouter()
-const [p,setP]=useState('today'),[[from,to],setR]=useState(rng('today')),[d,setD]=useState<R|null>(null),[ex,setEx]=useState<Ex[]>([]),[rx,setRx]=useState<Rx[]>([]),[zid,setZ]=useState(''),[sk,setSk]=useState({revenue:0,cost:0}),[em,setEm]=useState<{name:string;games:number;sessions:number;game_revenue:number;snack_revenue:number}[]>([]),[err,setErr]=useState('')
-const [n,setN]=useState({category:'Rent',amount:'',expense_date:f(new Date()),note:''}),[c,setC]=useState({category:'Rent',amount:'',day_of_month:'1'})
-const load=useCallback(async()=>{const {data:{user}}=await sb.auth.getUser();if(!user){r.replace('/login');return}
-const m=await sb.from('profiles').select('zone_id,role').eq('id',user.id).single();if(m.data?.role!=='admin'){r.replace('/login');return};setZ(m.data.zone_id)
-await sb.rpc('post_recurring')
-const [a,b,e,k,emp]=await Promise.all([sb.rpc('profit_report',{p_from:from,p_to:to}),sb.from('expenses').select('id,category,amount,expense_date,note').is('deleted_at',null).gte('expense_date',from).lte('expense_date',to).order('expense_date',{ascending:false}),sb.from('recurring_expenses').select('id,category,amount,day_of_month').eq('is_active',true),sb.rpc('snack_report',{p_from:from,p_to:to}),sb.rpc('employee_report',{p_from:from,p_to:to})])
-if(a.error||b.error||e.error){setErr(msg(a.error||b.error||e.error));return};setErr('');setD(a.data as R);setSk((k.data as {revenue:number;cost:number})||{revenue:0,cost:0});setEm((emp.data as typeof em)||[]);setEx(b.data as Ex[]);setRx(e.data as Rx[])},[r,from,to])
-useEffect(()=>{load()},[load])
-const done=async(q:PromiseLike<{error:{message:string}|null}>,after?:()=>void)=>{const {error}=await q;setErr(msg(error));if(!error)after?.();load()}
-const net=(d?.revenue??0)+sk.revenue-sk.cost-(d?.expenses??0),max=Math.max(1,...(d?.daily??[]).flatMap(x=>[x.revenue,x.expenses]))
-const csv=()=>{const rows=[['Date','Revenue','Expenses','Net'],...(d?.daily??[]).map(x=>[x.day,x.revenue,x.expenses,x.revenue-x.expenses]),[],['Expense date','Category','Amount','Note'],...ex.map(x=>[x.expense_date,x.category,x.amount,x.note??''])]
-const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([rows.map(l=>l.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n')],{type:'text/csv'}));a.download=`finance-${from}-${to}.csv`;a.click()}
-const esc=(s:unknown)=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c] as string))
-const pdf=()=>{const row=(a:unknown[])=>`<tr>${a.map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`;const w=window.open('','_blank');if(!w)return
-w.document.write(`<html><head><title>Finance ${esc(from)} to ${esc(to)}</title><style>body{font:14px system-ui;padding:24px}table{border-collapse:collapse;width:100%;margin:8px 0 20px}td,th{border:1px solid #ccc;padding:6px;text-align:left}h1,h2{margin:0 0 8px}</style></head><body><h1>Finance report</h1><p>${esc(from)} to ${esc(to)}</p>
-<table>${row(['Game revenue',etb(d?.revenue??0)])}${row(['Snack revenue',etb(sk.revenue)])}${row(['Snack cost',etb(sk.cost)])}${row(['Expenses',etb(d?.expenses??0)])}${row([net>=0?'Profit':'Loss',etb(Math.abs(net))])}</table>
-<h2>By employee</h2><table><tr><th>Name</th><th>Sessions</th><th>Games</th><th>Game revenue</th><th>Snack revenue</th></tr>${em.map(x=>row([x.name,x.sessions,x.games,etb(x.game_revenue),etb(x.snack_revenue)])).join('')}</table>
-<h2>Daily</h2><table><tr><th>Date</th><th>Revenue</th><th>Expenses</th></tr>${(d?.daily??[]).map(x=>row([x.day,etb(x.revenue),etb(x.expenses)])).join('')}</table>
-<h2>Expenses</h2><table><tr><th>Date</th><th>Category</th><th>Amount</th><th>Note</th></tr>${ex.map(x=>row([x.expense_date,x.category,etb(x.amount),x.note??''])).join('')}</table></body></html>`);w.document.close();w.focus();setTimeout(()=>w.print(),300)}
-const list=(o:Record<string,number>)=>Object.entries(o).map(([k,v])=><p key={k} className="flex justify-between text-sm"><span className="capitalize">{k==='cbe'?'CBE':k}</span><span>{etb(v)}</span></p>)
-return <main className="mx-auto max-w-2xl space-y-6 px-4 pb-24 pt-6">
-<header className="flex items-end justify-between"><h1 className="font-display text-3xl font-bold">Finance</h1><a href="/monitor" className="text-brand underline">Back to live floor</a></header>
-{err&&<p role="alert" className="rounded-xl border border-bad/40 bg-bad/10 p-3 text-sm">{err}</p>}
-<div className="grid grid-cols-4 gap-2">{[['today','Today'],['week','This week'],['month','This month'],['custom','Custom']].map(([k,l])=><button key={k} onClick={()=>{setP(k);if(k!=='custom')setR(rng(k) as [string,string])}} className={`btn text-sm ${p===k?'brand':'border border-line'}`}>{l}</button>)}</div>
-{p==='custom'&&<div className="grid grid-cols-2 gap-2"><input type="date" value={from} onChange={e=>setR([e.target.value,to])} className="inp"/><input type="date" value={to} onChange={e=>setR([from,e.target.value])} className="inp"/></div>}
-<p className="text-sm text-ink/60"><EthDate iso={from}/><EthDate iso={to}/></p>
-<div className="grid grid-cols-2 gap-3"><div className="rounded-2xl border border-line bg-surface p-4"><p className="text-ink/60">Revenue</p><p className="font-display text-2xl font-bold">{etb(d?.revenue??0)}</p><p className="text-sm text-ink/60">{d?.games??0} games · snacks {etb(sk.revenue)}</p></div>
-<div className="rounded-2xl border border-line bg-surface p-4"><p className="text-ink/60">Expenses</p><p className="font-display text-2xl font-bold">{etb(d?.expenses??0)}</p></div>
-<div className={`col-span-2 rounded-2xl border p-4 ${net>=0?'border-ok/50':'border-bad/50'} bg-surface`}><p className="text-ink/60">{net>=0?'Profit':'Loss'}</p><p className={`font-display text-4xl font-bold ${net>=0?'text-ok':'text-bad'}`}>{etb(Math.abs(net))}</p></div></div>
-{d&&<div className="grid gap-3 sm:grid-cols-3">{([['By unit type',d.by_kind],['By payment',d.by_method],['By expense',d.by_category]] as const).map(([t,o])=><div key={t} className="rounded-2xl border border-line bg-surface p-3"><p className="mb-1 font-semibold">{t}</p>{Object.keys(o).length?list(o):<p className="text-sm text-ink/50">Nothing yet</p>}</div>)}</div>}
-{(d?.daily.length??0)>1&&<div className="max-h-64 space-y-2 overflow-y-auto rounded-2xl border border-line bg-surface p-3">{d!.daily.map(x=><div key={x.day} className="text-xs"><div className="flex justify-between"><span>{x.day}</span><span>{etb(x.revenue)} / {etb(x.expenses)}</span></div><div className="h-1.5 rounded bg-brand" style={{width:`${x.revenue/max*100}%`}}/><div className="mt-0.5 h-1.5 rounded bg-bad" style={{width:`${x.expenses/max*100}%`}}/></div>)}<p className="text-xs text-ink/50">Red bar: revenue. Orange bar: expenses.</p></div>}
-{!!em.length&&<div className="rounded-2xl border border-line bg-surface p-3"><p className="mb-1 font-semibold">By employee</p>{em.map(x=><p key={x.name} className="flex justify-between text-sm"><span>{x.name} · {x.sessions} sessions · {x.games} games</span><span>{etb(x.game_revenue+x.snack_revenue)}</span></p>)}</div>}
-<div className="grid grid-cols-2 gap-2"><button onClick={csv} className="btn w-full border border-line">Export CSV</button><button onClick={pdf} className="btn w-full border border-line">Export PDF</button></div>
-<section><h2 className="mb-2 font-display text-xl font-bold">Expenses</h2>
-<div className="space-y-2">{ex.map(x=><div key={x.id} className="flex items-center gap-2 rounded-2xl border border-line bg-surface p-3"><div className="flex-1"><p className="font-semibold">{x.category}</p><p className="text-sm text-ink/60">{x.expense_date}{x.note?` · ${x.note}`:''}</p></div>
-<input aria-label="Amount" type="number" min="0" defaultValue={x.amount} onBlur={e=>Number(e.target.value)!==x.amount&&done(sb.from('expenses').update({amount:Number(e.target.value)}).eq('id',x.id))} className="inp !w-28"/>
-<button onClick={()=>confirm('Delete this expense?')&&done(sb.from('expenses').update({deleted_at:new Date().toISOString()}).eq('id',x.id))} className="btn px-3 text-bad">Delete</button></div>)}
-{!ex.length&&<p className="rounded-2xl border border-line p-4 text-ink/60">No expenses in this period. Add rent, electricity or repairs below.</p>}</div>
-<form onSubmit={e=>{e.preventDefault();done(sb.from('expenses').insert({zone_id:zid,category:n.category,amount:Number(n.amount),expense_date:n.expense_date,note:n.note||null}),()=>setN({...n,amount:'',note:''}))}} className="mt-3 grid grid-cols-2 gap-2">
-<select value={n.category} onChange={e=>setN({...n,category:e.target.value})} className="inp">{CATS.map(k=><option key={k}>{k}</option>)}</select><input required type="number" min="0" value={n.amount} onChange={e=>setN({...n,amount:e.target.value})} placeholder="Amount (ETB)" className="inp"/>
-<input type="date" value={n.expense_date} onChange={e=>setN({...n,expense_date:e.target.value})} className="inp"/><input value={n.note} onChange={e=>setN({...n,note:e.target.value})} placeholder="Note (optional)" className="inp"/><button className="btn brand col-span-2">Add expense</button></form></section>
-<section><h2 className="mb-2 font-display text-xl font-bold">Monthly recurring</h2>
-<div className="space-y-2">{rx.map(x=><div key={x.id} className="flex items-center justify-between rounded-2xl border border-line bg-surface p-3"><span>{x.category} · {etb(x.amount)} on day {x.day_of_month}</span><button onClick={()=>done(sb.from('recurring_expenses').update({is_active:false}).eq('id',x.id))} className="btn px-3 text-bad">Stop</button></div>)}</div>
-<form onSubmit={e=>{e.preventDefault();done(sb.from('recurring_expenses').insert({zone_id:zid,category:c.category,amount:Number(c.amount),day_of_month:Number(c.day_of_month)}),()=>setC({...c,amount:''}))}} className="mt-3 grid grid-cols-3 gap-2">
-<select value={c.category} onChange={e=>setC({...c,category:e.target.value})} className="inp">{CATS.map(k=><option key={k}>{k}</option>)}</select><input required type="number" min="0" value={c.amount} onChange={e=>setC({...c,amount:e.target.value})} placeholder="Amount" className="inp"/><input required type="number" min="1" max="28" value={c.day_of_month} onChange={e=>setC({...c,day_of_month:e.target.value})} placeholder="Day 1-28" className="inp"/>
-<button className="btn brand col-span-3">Add monthly expense</button></form></section></main>}
+import {
+  calculateNetProfit,
+  addMoney,
+  subMoney,
+  formatETB,
+} from '@/lib/finance'
+
+interface ReportData {
+  revenue: number
+  games: number
+  expenses: number
+  by_method: Record<string, number>
+  by_kind: Record<string, number>
+  by_category: Record<string, number>
+  daily: { day: string; revenue: number; expenses: number }[]
+}
+
+interface Expense {
+  id: string
+  category: string
+  amount: number
+  expense_date: string
+  note: string | null
+}
+
+interface RecurringExpense {
+  id: string
+  category: string
+  amount: number
+  day_of_month: number
+}
+
+const CATEGORIES = ['Rent', 'Electricity', 'Maintenance', 'Salary', 'Internet', 'Other']
+
+const formatDate = (d: Date) => d.toLocaleDateString('en-CA')
+
+const getRange = (period: string): [string, string] => {
+  const now = new Date()
+  if (period === 'today') {
+    return [formatDate(now), formatDate(now)]
+  }
+  if (period === 'week') {
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - ((now.getDay() + 6) % 7))
+    return [formatDate(monday), formatDate(now)]
+  }
+  if (period === 'month') {
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
+    return [formatDate(firstDay), formatDate(now)]
+  }
+  return [formatDate(now), formatDate(now)]
+}
+
+export default function FinancePage() {
+  const router = useRouter()
+  const { user, profile, zone, loading } = useAuthGuard(['admin', 'super_admin'])
+
+  const [period, setPeriod] = useState('today')
+  const [[fromDate, toDate], setDateRange] = useState<[string, string]>(getRange('today'))
+  const [report, setReport] = useState<ReportData | null>(null)
+  const [expenses, setExpenses] = useState<Expense[]>([])
+  const [recurring, setRecurring] = useState<RecurringExpense[]>([])
+  const [snackStats, setSnackStats] = useState({ revenue: 0, cost: 0 })
+  const [employeeStats, setEmployeeStats] = useState<
+    {
+      name: string
+      games: number
+      sessions: number
+      game_revenue: number
+      snack_revenue: number
+    }[]
+  >([])
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  // New expense form state
+  const [newExp, setNewExp] = useState({
+    category: 'Rent',
+    amount: '',
+    expense_date: formatDate(new Date()),
+    note: '',
+  })
+
+  // New recurring expense form state
+  const [newRec, setNewRec] = useState({
+    category: 'Rent',
+    amount: '',
+    day_of_month: '1',
+  })
+
+  const loadFinanceData = useCallback(async () => {
+    if (!profile?.zone_id) return
+    setBusy(true)
+
+    // Run scheduled recurring expense generator
+    await sb.rpc('post_recurring')
+
+    const [profitRes, expRes, recRes, snackRes, empRes] = await Promise.all([
+      sb.rpc('profit_report', { p_from: fromDate, p_to: toDate }),
+      sb
+        .from('expenses')
+        .select('id, category, amount, expense_date, note')
+        .is('deleted_at', null)
+        .gte('expense_date', fromDate)
+        .lte('expense_date', toDate)
+        .order('expense_date', { ascending: false }),
+      sb.from('recurring_expenses').select('id, category, amount, day_of_month').eq('is_active', true),
+      sb.rpc('snack_report', { p_from: fromDate, p_to: toDate }),
+      sb.rpc('employee_report', { p_from: fromDate, p_to: toDate }),
+    ])
+
+    setBusy(false)
+    if (profitRes.error || expRes.error || recRes.error) {
+      setErr(msg(profitRes.error || expRes.error || recRes.error))
+      return
+    }
+
+    setErr('')
+    setReport(profitRes.data as ReportData)
+    setExpenses((expRes.data as Expense[]) || [])
+    setRecurring((recRes.data as RecurringExpense[]) || [])
+    setSnackStats(
+      (snackRes.data as { revenue: number; cost: number }) || { revenue: 0, cost: 0 }
+    )
+    setEmployeeStats((empRes.data as typeof employeeStats) || [])
+  }, [profile?.zone_id, fromDate, toDate])
+
+  useEffect(() => {
+    if (profile) loadFinanceData()
+  }, [profile, loadFinanceData])
+
+  const handleAction = async (promise: PromiseLike<{ error: { message: string } | null }>, cb?: () => void) => {
+    setBusy(true)
+    const { error } = await promise
+    setBusy(false)
+    if (error) {
+      setErr(msg(error))
+    } else {
+      cb?.()
+      loadFinanceData()
+    }
+  }
+
+  // Exact math calculations
+  const gameRevenue = report?.revenue ?? 0
+  const snackRevenue = snackStats.revenue
+  const grossRevenue = addMoney(gameRevenue, snackRevenue)
+  const snackCost = snackStats.cost
+  const totalExpenses = report?.expenses ?? 0
+  const netProfit = calculateNetProfit(gameRevenue, snackRevenue, snackCost, totalExpenses)
+
+  const maxDaily = Math.max(1, ...(report?.daily ?? []).flatMap((x) => [x.revenue, x.expenses]))
+
+  // CSV Export
+  const exportCSV = () => {
+    const rows = [
+      ['Date', 'Revenue', 'Expenses', 'Net'],
+      ...(report?.daily ?? []).map((x) => [
+        x.day,
+        x.revenue,
+        x.expenses,
+        subMoney(x.revenue, x.expenses),
+      ]),
+      [],
+      ['Expense Date', 'Category', 'Amount', 'Note'],
+      ...expenses.map((x) => [x.expense_date, x.category, x.amount, x.note ?? '']),
+    ]
+
+    const csvContent = rows
+      .map((line) => line.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(','))
+      .join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `blackout-finance-${fromDate}-${toDate}.csv`
+    a.click()
+  }
+
+  // Print Report
+  const exportPDF = () => {
+    window.print()
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-bg text-ink">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+      </div>
+    )
+  }
+
+  return (
+    <AppLayout
+      profile={profile}
+      zone={zone}
+      title="Financial Accounting"
+      subtitle="Profit & loss statements, revenue breakdown, expense auditing and exports"
+      onRefresh={loadFinanceData}
+      action={
+        <div className="flex items-center gap-2">
+          <button onClick={exportCSV} className="btn btn-secondary text-xs h-9 px-3">
+            📥 Export CSV
+          </button>
+          <button onClick={exportPDF} className="btn btn-outline-gold text-xs h-9 px-3">
+            🖨️ Print Report
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-6">
+        {err && (
+          <div role="alert" className="rounded-2xl border border-bad/40 bg-bad/10 p-3.5 text-xs text-bad">
+            {err}
+          </div>
+        )}
+
+        {/* Date Filter Tabs */}
+        <div className="surface-card p-4 space-y-3">
+          <div className="grid grid-cols-4 gap-2">
+            {[
+              ['today', 'Today'],
+              ['week', 'This Week'],
+              ['month', 'This Month'],
+              ['custom', 'Custom'],
+            ].map(([k, label]) => (
+              <button
+                key={k}
+                onClick={() => {
+                  setPeriod(k)
+                  if (k !== 'custom') setDateRange(getRange(k))
+                }}
+                className={`btn text-xs font-bold py-2 ${
+                  period === k ? 'btn-gold' : 'btn-secondary text-ink-muted'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {period === 'custom' && (
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-line">
+              <div>
+                <label className="block text-[11px] font-semibold text-ink-muted mb-1">
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setDateRange([e.target.value, toDate])}
+                  className="inp text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-ink-muted mb-1">
+                  End Date
+                </label>
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setDateRange([fromDate, e.target.value])}
+                  className="inp text-xs"
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 text-xs text-ink-dim">
+            <span>📅 {fromDate} to {toDate}</span>
+            <EthDate iso={fromDate} />
+          </div>
+        </div>
+
+        {/* P&L Financial Summary Cards */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="surface-card p-4 space-y-1">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">
+              Game Sessions
+            </p>
+            <p className="font-display text-2xl font-extrabold text-ink truncate">
+              {etb(gameRevenue)}
+            </p>
+            <p className="text-[11px] text-ink-dim">{report?.games ?? 0} games counted</p>
+          </div>
+
+          <div className="surface-card p-4 space-y-1">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">
+              Snacks & Drinks
+            </p>
+            <p className="font-display text-2xl font-extrabold text-brand truncate">
+              {etb(snackRevenue)}
+            </p>
+            <p className="text-[11px] text-ink-dim">COGS: {etb(snackCost)}</p>
+          </div>
+
+          <div className="surface-card p-4 space-y-1">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">
+              Operating Expenses
+            </p>
+            <p className="font-display text-2xl font-extrabold text-bad truncate">
+              {etb(totalExpenses)}
+            </p>
+            <p className="text-[11px] text-ink-dim">{expenses.length} expense items</p>
+          </div>
+
+          <div
+            className={`surface-card p-4 space-y-1 ${
+              netProfit >= 0 ? 'border-ok/50 bg-ok/5' : 'border-bad/50 bg-bad/5'
+            }`}
+          >
+            <p className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">
+              {netProfit >= 0 ? 'Net Operating Profit' : 'Net Operating Loss'}
+            </p>
+            <p
+              className={`font-display text-2xl font-extrabold truncate ${
+                netProfit >= 0 ? 'text-ok' : 'text-bad'
+              }`}
+            >
+              {etb(Math.abs(netProfit))}
+            </p>
+            <p className="text-[11px] text-ink-dim">Gross: {etb(grossRevenue)}</p>
+          </div>
+        </div>
+
+        {/* Revenue & Expense Breakdown Grids */}
+        {report && (
+          <div className="grid gap-3 sm:grid-cols-3">
+            {/* By Payment Method */}
+            <div className="surface-card p-4 space-y-2">
+              <h3 className="font-display text-xs font-bold uppercase tracking-wider text-brand">
+                By Payment Method
+              </h3>
+              <div className="space-y-1.5 divide-y divide-line/60">
+                {Object.entries(report.by_method).map(([m, val]) => (
+                  <div key={m} className="pt-1.5 flex justify-between text-xs">
+                    <span className="capitalize font-medium text-ink">
+                      {m === 'cbe' ? 'CBE Bank' : m}
+                    </span>
+                    <span className="font-bold text-ink">{etb(val)}</span>
+                  </div>
+                ))}
+                {Object.keys(report.by_method).length === 0 && (
+                  <p className="text-xs text-ink-dim pt-1">No collections recorded</p>
+                )}
+              </div>
+            </div>
+
+            {/* By Unit Kind */}
+            <div className="surface-card p-4 space-y-2">
+              <h3 className="font-display text-xs font-bold uppercase tracking-wider text-brand">
+                By Console / Unit Type
+              </h3>
+              <div className="space-y-1.5 divide-y divide-line/60">
+                {Object.entries(report.by_kind).map(([k, val]) => (
+                  <div key={k} className="pt-1.5 flex justify-between text-xs">
+                    <span className="uppercase font-medium text-ink">{k}</span>
+                    <span className="font-bold text-ink">{etb(val)}</span>
+                  </div>
+                ))}
+                {Object.keys(report.by_kind).length === 0 && (
+                  <p className="text-xs text-ink-dim pt-1">No activity yet</p>
+                )}
+              </div>
+            </div>
+
+            {/* By Expense Category */}
+            <div className="surface-card p-4 space-y-2">
+              <h3 className="font-display text-xs font-bold uppercase tracking-wider text-brand">
+                By Expense Category
+              </h3>
+              <div className="space-y-1.5 divide-y divide-line/60">
+                {Object.entries(report.by_category).map(([c, val]) => (
+                  <div key={c} className="pt-1.5 flex justify-between text-xs">
+                    <span className="font-medium text-ink">{c}</span>
+                    <span className="font-bold text-bad">{etb(val)}</span>
+                  </div>
+                ))}
+                {Object.keys(report.by_category).length === 0 && (
+                  <p className="text-xs text-ink-dim pt-1">Zero expenses logged</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Daily Financial Chart / Bars */}
+        {(report?.daily.length ?? 0) > 1 && (
+          <div className="surface-card p-5 space-y-3">
+            <h3 className="font-display text-sm font-bold text-ink">Daily Revenue vs Expenses</h3>
+            <div className="max-h-60 overflow-y-auto space-y-2.5">
+              {report!.daily.map((x) => (
+                <div key={x.day} className="space-y-1 text-xs">
+                  <div className="flex justify-between font-medium">
+                    <span className="text-ink">{x.day}</span>
+                    <span>
+                      <b className="text-brand">{etb(x.revenue)}</b> /{' '}
+                      <span className="text-bad">{etb(x.expenses)}</span>
+                    </span>
+                  </div>
+                  <div className="flex gap-1 h-2 rounded-full overflow-hidden bg-surface-elevated">
+                    <div
+                      className="bg-brand rounded-full transition-all"
+                      style={{ width: `${(x.revenue / maxDaily) * 100}%` }}
+                    />
+                    <div
+                      className="bg-bad rounded-full transition-all"
+                      style={{ width: `${(x.expenses / maxDaily) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Per-Employee Shift Performance */}
+        {employeeStats.length > 0 && (
+          <div className="surface-card p-5 space-y-3">
+            <h3 className="font-display text-sm font-bold text-ink">Employee Shift Performance</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="border-b border-line text-ink-dim font-bold uppercase">
+                  <tr>
+                    <th className="py-2">Staff Member</th>
+                    <th className="py-2">Sessions</th>
+                    <th className="py-2">Games</th>
+                    <th className="py-2">Game Revenue</th>
+                    <th className="py-2">Snack Revenue</th>
+                    <th className="py-2 text-right">Total Generated</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line/60">
+                  {employeeStats.map((emp) => (
+                    <tr key={emp.name} className="hover:bg-surface-elevated/40">
+                      <td className="py-2.5 font-bold text-ink">{emp.name}</td>
+                      <td className="py-2.5">{emp.sessions}</td>
+                      <td className="py-2.5">{emp.games}</td>
+                      <td className="py-2.5">{etb(emp.game_revenue)}</td>
+                      <td className="py-2.5">{etb(emp.snack_revenue)}</td>
+                      <td className="py-2.5 font-bold text-brand text-right">
+                        {etb(addMoney(emp.game_revenue, emp.snack_revenue))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Expenses Management Section */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* One-time Expenses */}
+          <div className="surface-card p-5 space-y-4">
+            <h3 className="font-display text-base font-bold text-ink">Record Operating Expense</h3>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                handleAction(
+                  sb.from('expenses').insert({
+                    zone_id: profile!.zone_id,
+                    category: newExp.category,
+                    amount: Number(newExp.amount),
+                    expense_date: newExp.expense_date,
+                    note: newExp.note.trim() || null,
+                  }),
+                  () => setNewExp({ ...newExp, amount: '', note: '' })
+                )
+              }}
+              className="grid grid-cols-2 gap-2"
+            >
+              <select
+                value={newExp.category}
+                onChange={(e) => setNewExp({ ...newExp, category: e.target.value })}
+                className="inp text-xs"
+              >
+                {CATEGORIES.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </select>
+              <input
+                required
+                type="number"
+                min="0"
+                step="any"
+                value={newExp.amount}
+                onChange={(e) => setNewExp({ ...newExp, amount: e.target.value })}
+                placeholder="Amount (ETB)"
+                className="inp text-xs font-bold"
+              />
+              <input
+                type="date"
+                value={newExp.expense_date}
+                onChange={(e) => setNewExp({ ...newExp, expense_date: e.target.value })}
+                className="inp text-xs"
+              />
+              <input
+                value={newExp.note}
+                onChange={(e) => setNewExp({ ...newExp, note: e.target.value })}
+                placeholder="Note / Receipt info"
+                className="inp text-xs"
+              />
+              <button disabled={busy} className="btn btn-gold col-span-2 text-xs">
+                + Add Expense
+              </button>
+            </form>
+
+            <div className="max-h-60 overflow-y-auto space-y-2 divide-y divide-line/60">
+              {expenses.map((exp) => (
+                <div key={exp.id} className="pt-2 flex items-center justify-between text-xs">
+                  <div>
+                    <p className="font-bold text-ink">{exp.category}</p>
+                    <p className="text-[11px] text-ink-muted">
+                      {exp.expense_date} {exp.note ? `· ${exp.note}` : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-bold text-bad">{etb(exp.amount)}</span>
+                    <button
+                      onClick={() =>
+                        confirm('Delete this expense record?') &&
+                        handleAction(
+                          sb
+                            .from('expenses')
+                            .update({ deleted_at: new Date().toISOString() })
+                            .eq('id', exp.id)
+                        )
+                      }
+                      className="text-bad hover:underline"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {expenses.length === 0 && (
+                <p className="py-4 text-center text-xs text-ink-dim">No expenses in this period.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Monthly Recurring Expenses */}
+          <div className="surface-card p-5 space-y-4">
+            <h3 className="font-display text-base font-bold text-ink">Monthly Recurring Expenses</h3>
+            <p className="text-xs text-ink-muted leading-relaxed">
+              Rent, internet, or scheduled bills automatically post on their set day of month.
+            </p>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                handleAction(
+                  sb.from('recurring_expenses').insert({
+                    zone_id: profile!.zone_id,
+                    category: newRec.category,
+                    amount: Number(newRec.amount),
+                    day_of_month: Number(newRec.day_of_month),
+                  }),
+                  () => setNewRec({ ...newRec, amount: '' })
+                )
+              }}
+              className="grid grid-cols-3 gap-2"
+            >
+              <select
+                value={newRec.category}
+                onChange={(e) => setNewRec({ ...newRec, category: e.target.value })}
+                className="inp text-xs"
+              >
+                {CATEGORIES.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </select>
+              <input
+                required
+                type="number"
+                min="0"
+                step="any"
+                value={newRec.amount}
+                onChange={(e) => setNewRec({ ...newRec, amount: e.target.value })}
+                placeholder="Amount (ETB)"
+                className="inp text-xs font-bold"
+              />
+              <input
+                required
+                type="number"
+                min="1"
+                max="28"
+                value={newRec.day_of_month}
+                onChange={(e) => setNewRec({ ...newRec, day_of_month: e.target.value })}
+                placeholder="Day 1-28"
+                className="inp text-xs"
+              />
+              <button disabled={busy} className="btn btn-gold col-span-3 text-xs">
+                + Schedule Monthly Expense
+              </button>
+            </form>
+
+            <div className="space-y-2">
+              {recurring.map((rec) => (
+                <div
+                  key={rec.id}
+                  className="flex items-center justify-between rounded-xl border border-line bg-surface-elevated p-3 text-xs"
+                >
+                  <div>
+                    <span className="font-bold text-ink">{rec.category}</span>
+                    <span className="text-ink-muted ml-2">
+                      · {etb(rec.amount)} on day {rec.day_of_month}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() =>
+                      handleAction(
+                        sb.from('recurring_expenses').update({ is_active: false }).eq('id', rec.id)
+                      )
+                    }
+                    className="text-bad hover:underline font-semibold"
+                  >
+                    Stop
+                  </button>
+                </div>
+              ))}
+              {recurring.length === 0 && (
+                <p className="py-4 text-center text-xs text-ink-dim">
+                  No monthly recurring expenses configured.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </AppLayout>
+  )
+}

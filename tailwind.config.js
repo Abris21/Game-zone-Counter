@@ -1,1 +1,74 @@
-module.exports={content:['./src/**/*.{ts,tsx}'],theme:{extend:{colors:{bg:'#120D0C',surface:'#1C1514',line:'#3A2B2D',ink:'#F3E9E4',brand:'#E03A52',ok:'#4CC38A',bad:'#FF9A6B'},fontFamily:{display:['var(--font-display)','var(--font-am)','sans-serif'],sans:['var(--font-sans)','var(--font-am)','system-ui','sans-serif']}}},plugins:[]}
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: ['./src/**/*.{ts,tsx}'],
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        bg: '#080B11',
+        surface: '#111622',
+        'surface-elevated': '#182032',
+        'surface-highlight': '#202A42',
+        line: '#232D42',
+        'line-gold': '#544622',
+        ink: '#F8FAFC',
+        'ink-muted': '#94A3B8',
+        'ink-dim': '#64748B',
+        brand: '#D4AF37', // Champagne Gold primary
+        'brand-hover': '#BFA02E',
+        'brand-light': '#F5E6B3',
+        gold: {
+          DEFAULT: '#D4AF37',
+          50: '#FDFBF4',
+          100: '#FAF4E3',
+          200: '#F5E6B3',
+          300: '#EED683',
+          400: '#E5C453',
+          500: '#D4AF37',
+          600: '#B89628',
+          700: '#91741D',
+          800: '#6B5416',
+          900: '#4A3910',
+        },
+        ps: {
+          blue: '#00439C',
+          cyan: '#0070D1',
+          triangle: '#00F0FF',
+          circle: '#FF3366',
+          cross: '#3388FF',
+          square: '#FF66CC',
+        },
+        ok: '#10B981',
+        warning: '#F59E0B',
+        bad: '#EF4444',
+      },
+      fontFamily: {
+        display: [
+          'var(--font-display)',
+          'Sora',
+          'Inter',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'Segoe UI',
+          'sans-serif',
+        ],
+        sans: [
+          'var(--font-sans)',
+          'Inter',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'Segoe UI',
+          'Roboto',
+          'sans-serif',
+        ],
+        am: ['var(--font-am)', 'Noto Sans Ethiopic', 'sans-serif'],
+      },
+      boxShadow: {
+        glow: '0 0 20px -3px rgba(212, 175, 55, 0.25)',
+        'glow-sm': '0 0 10px -2px rgba(212, 175, 55, 0.2)',
+        'glow-blue': '0 0 20px -3px rgba(0, 112, 209, 0.25)',
+      },
+    },
+  },
+  plugins: [],
+}
