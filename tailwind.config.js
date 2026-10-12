@@ -1,0 +1,1 @@
+module.exports={content:['./src/**/*.{ts,tsx}'],theme:{extend:{colors:{bg:'#120D0C',surface:'#1C1514',line:'#3A2B2D',ink:'#F3E9E4',brand:'#E03A52',ok:'#4CC38A',bad:'#FF9A6B'},fontFamily:{display:['var(--font-display)','var(--font-am)','sans-serif'],sans:['var(--font-sans)','var(--font-am)','system-ui','sans-serif']}}},plugins:[]}

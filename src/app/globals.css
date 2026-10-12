@@ -1,0 +1,10 @@
+@tailwind base;@tailwind components;@tailwind utilities;
+:root{color-scheme:dark}
+body{background:radial-gradient(900px 500px at 50% -15%,#3a1218 0,#120D0C 65%) fixed;color:#F3E9E4;min-height:100dvh}
+input,select{color:#F3E9E4}input::placeholder{color:#F3E9E4;opacity:.45}select option{background:#1C1514}
+.btn{min-height:52px;border-radius:14px;font-weight:600;transition:transform .08s,background .2s}
+.btn:active{transform:scale(.96)}
+.btn:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #FF6B80;outline-offset:2px}
+.brand{background:#C8243B;color:#fff}.brand:hover{background:#A91D31}
+.inp{height:48px;width:100%;border-radius:12px;border:1px solid #3A2B2D;background:#1C1514;padding:0 12px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
