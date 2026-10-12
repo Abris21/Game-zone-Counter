@@ -68,11 +68,13 @@ describe('Financial Math & Currency Precision', () => {
     expect(surplus.isSurplus).toBe(true)
   })
 
-  it('formats ETB currency properly for English and Amharic', () => {
-    expect(formatETB(150, 'en')).toBe('150 ETB')
-    expect(formatETB(150.5, 'en')).toBe('150.50 ETB')
-    expect(formatETB(150, 'am')).toBe('150 ብር')
-    expect(formatETB(0, 'en')).toBe('0 ETB')
-    expect(formatETB(null, 'en')).toBe('0 ETB')
+  it('formats ETB currency properly for English and Amharic (spec: "ETB 0.00")', () => {
+    // English: "ETB " prefix per design spec, always 2 decimal places
+    expect(formatETB(150, 'en')).toBe('ETB 150.00')
+    expect(formatETB(150.5, 'en')).toBe('ETB 150.50')
+    expect(formatETB(0, 'en')).toBe('ETB 0.00')
+    expect(formatETB(null, 'en')).toBe('ETB 0.00')
+    // Amharic: suffix " ብር"
+    expect(formatETB(150, 'am')).toBe('150.00 ብር')
   })
 })

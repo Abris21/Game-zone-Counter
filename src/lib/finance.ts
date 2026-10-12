@@ -84,7 +84,10 @@ export function calculateShiftVariance(
 
 /**
  * Formats a currency amount to Ethiopian Birr with consistent formatting.
- * Supports English ('ETB') and Amharic ('ብር').
+ *
+ * Output format (per design spec): "ETB 0.00" (English) or "0.00 ብር" (Amharic).
+ * English: prefix "ETB " before the number.
+ * Amharic: suffix " ብር" after the number (conventional Ethiopian).
  */
 export function formatETB(
   amount: number | null | undefined,
@@ -100,9 +103,9 @@ export function formatETB(
     }
   }
   const formatted = val.toLocaleString('en-US', {
-    minimumFractionDigits: val % 1 === 0 ? 0 : 2,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
-  const unit = lang === 'am' ? 'ብር' : 'ETB'
-  return `${formatted} ${unit}`
+  // Spec: "ETB 0.00" prefix format for English; "0.00 ብር" suffix for Amharic
+  return lang === 'am' ? `${formatted} ብር` : `ETB ${formatted}`
 }

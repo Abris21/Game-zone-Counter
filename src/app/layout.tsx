@@ -38,7 +38,24 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Anti-flash theme init — must run before first paint */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function(){
+                try {
+                  var t = localStorage.getItem('gz-theme') || 'dark';
+                  document.documentElement.classList.add(t);
+                } catch(e) {
+                  document.documentElement.classList.add('dark');
+                }
+              })();
+            `,
+          }}
+        />
+      </head>
       <body
         className={`${soraFont.variable} ${interFont.variable} ${ethiopicFont.variable} font-sans bg-bg text-ink antialiased selection:bg-brand selection:text-bg`}
       >

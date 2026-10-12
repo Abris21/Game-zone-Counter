@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { sb } from '@/lib/supabase'
@@ -9,6 +9,45 @@ import { PlayStationSymbolsRow, ControllerIcon, TrophyIcon } from './PlayStation
 import Bell from './Bell'
 import { useI18n, useT } from '@/lib/i18n'
 import NetBanner from './NetBanner'
+import ThemeToggle from './ThemeToggle'
+
+/** Compact connectivity badge shown in the header bar (spec requirement 4.1) */
+function ConnectivityBadge() {
+  const [status, setStatus] = useState<'online' | 'offline' | 'syncing'>('online')
+
+  useEffect(() => {
+    function update() {
+      setStatus(navigator.onLine ? 'online' : 'offline')
+    }
+    update()
+    window.addEventListener('online', update)
+    window.addEventListener('offline', update)
+    // Listen for sync-pending custom events from NetBanner / offline queue
+    const onSync = () => setStatus('syncing')
+    const onSynced = () => setStatus(navigator.onLine ? 'online' : 'offline')
+    window.addEventListener('gz-sync-pending', onSync)
+    window.addEventListener('gz-sync-done', onSynced)
+    return () => {
+      window.removeEventListener('online', update)
+      window.removeEventListener('offline', update)
+      window.removeEventListener('gz-sync-pending', onSync)
+      window.removeEventListener('gz-sync-done', onSynced)
+    }
+  }, [])
+
+  const dot = status === 'online' ? 'bg-ok animate-pulse' :
+               status === 'syncing' ? 'bg-warning animate-pulse' : 'bg-bad'
+  const label = status === 'online' ? 'Online' : status === 'syncing' ? 'Sync Pending' : 'Offline'
+  const cls = status === 'online' ? 'badge-online' :
+              status === 'syncing' ? 'badge-online badge-syncing' : 'badge-online badge-offline'
+
+  return (
+    <span id="connectivity-badge" className={cls}>
+      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+      {label}
+    </span>
+  )
+}
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -178,8 +217,12 @@ export default function AppLayout({
 
           {/* Right header controls */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Connectivity badge — spec requirement 4.1 */}
+            <ConnectivityBadge />
             {action}
             <Bell />
+            {/* Theme toggle — spec requirement 4.4 */}
+            <ThemeToggle compact />
             <button
               onClick={() => setLang(lang === 'am' ? 'en' : 'am')}
               className="lg:hidden rounded-xl border border-line bg-surface px-2.5 py-1.5 text-xs font-bold text-brand"
