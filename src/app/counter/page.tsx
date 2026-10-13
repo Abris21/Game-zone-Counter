@@ -524,7 +524,7 @@ export default function CounterPage() {
             return (
               <section
                 key={st.id}
-                className={`relative flex flex-col justify-between rounded-2xl border p-3 shadow-lg transition-all sm:rounded-3xl sm:p-4.5 ${openSession ? 'col-span-2 lg:col-span-1' : ''} ${openSession
+                className={`relative justify-between rounded-2xl border p-3 shadow-lg transition-all sm:rounded-3xl sm:p-4.5 ${openSession ? 'col-span-2 grid grid-cols-2 items-center gap-3 lg:col-span-1 lg:flex lg:flex-col' : 'flex flex-col'} ${openSession
                   ? isPaused
                     ? 'border-warning/50 bg-surface/90 ring-1 ring-warning/30'
                     : 'border-brand/60 bg-surface ring-1 ring-brand/40 shadow-glow-sm'
@@ -532,8 +532,8 @@ export default function CounterPage() {
                   }`}
               >
                 {/* Station header */}
-                <div>
-                  <div className={`flex gap-2 ${openSession ? 'flex-row items-start justify-between' : 'flex-col sm:flex-row sm:items-start sm:justify-between'}`}>
+                <div className={openSession ? 'contents lg:block' : ''}>
+                  <div className={`flex gap-2 ${openSession ? 'col-span-2 flex-row items-start justify-between' : 'flex-col sm:flex-row sm:items-start sm:justify-between'}`}>
                     <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-elevated text-xs sm:h-7 sm:w-7 sm:text-sm">
                         {st.kind === 'ps5' ? '🎮' : st.kind === 'ps4' ? '🕹️' : '🎱'}
@@ -575,7 +575,7 @@ export default function CounterPage() {
 
                   {/* Open Session Active Counter Display */}
                   {openSession ? (
-                    <div className="py-3 text-center sm:py-4">
+                    <div className="flex flex-col items-center justify-center gap-1 py-3 text-center sm:py-4">
                       <div className="relative inline-block">
                         <span
                           className="select-none font-display text-5xl font-extrabold tracking-tight text-ink sm:text-7xl"
@@ -589,7 +589,7 @@ export default function CounterPage() {
                       </div>
 
                       {/* Current bill total & snack badges */}
-                      <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5 text-xs">
+                      <div className="mt-0 flex flex-col items-center justify-center gap-1.5 text-xs sm:mt-3">
                         <span className="font-display font-extrabold text-brand text-sm">
                           {etb(currentTotal)}
                         </span>
@@ -613,7 +613,7 @@ export default function CounterPage() {
                 </div>
 
                 {/* Counter Actions */}
-                <div className="pt-2 border-t border-line/60">
+                <div className={openSession ? 'border-l border-line/60 pl-3 pt-2 lg:border-l-0 lg:border-t lg:pl-0' : 'border-t border-line/60 pt-2'}>
                   {!openSession ? (
                     <ActionButton
                       onClick={() => startSession(st)}
@@ -625,7 +625,7 @@ export default function CounterPage() {
                   ) : (
                     <div className="space-y-2">
                       {/* Big Quick Touch Adjust Buttons */}
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
                         <ActionButton
                           feedbackMs={110}
                           aria-label="Remove one game"
@@ -644,14 +644,14 @@ export default function CounterPage() {
                         </ActionButton>
                         <ActionButton
                           onClick={() => setActiveEndSession(openSession)}
-                          className="btn border border-brand/60 bg-brand/10 text-xs font-bold text-brand hover:bg-brand/20"
+                          className="btn col-span-2 border border-brand/60 bg-brand/10 text-xs font-bold text-brand hover:bg-brand/20 lg:col-span-1"
                         >
                           {t('End')}
                         </ActionButton>
                       </div>
 
                       {/* Micro actions: Snacks, Pause, FIFA rules, Handover */}
-                      <div className="grid grid-cols-3 gap-1 text-[10px] sm:text-[11px]">
+                      <div className="grid grid-cols-2 gap-1 text-[10px] sm:text-[11px] lg:grid-cols-3">
                         <ActionButton
                           onClick={() => setActiveSnackSession(openSession.id)}
                           className="min-h-10 whitespace-normal break-words rounded-lg border border-line bg-surface-elevated px-1 py-1.5 text-center font-semibold leading-tight text-ink-muted transition-colors hover:border-brand/40 hover:text-ink"
