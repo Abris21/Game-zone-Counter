@@ -524,7 +524,7 @@ export default function CounterPage() {
             return (
               <section
                 key={st.id}
-                className={`relative flex flex-col justify-between rounded-2xl border p-3 shadow-lg transition-all sm:rounded-3xl sm:p-4.5 ${openSession
+                className={`relative flex flex-col justify-between rounded-2xl border p-3 shadow-lg transition-all sm:rounded-3xl sm:p-4.5 ${openSession ? 'col-span-2 lg:col-span-1' : ''} ${openSession
                   ? isPaused
                     ? 'border-warning/50 bg-surface/90 ring-1 ring-warning/30'
                     : 'border-brand/60 bg-surface ring-1 ring-brand/40 shadow-glow-sm'
@@ -533,7 +533,7 @@ export default function CounterPage() {
               >
                 {/* Station header */}
                 <div>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
+                  <div className={`flex gap-2 ${openSession ? 'flex-row items-start justify-between' : 'flex-col sm:flex-row sm:items-start sm:justify-between'}`}>
                     <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-elevated text-xs sm:h-7 sm:w-7 sm:text-sm">
                         {st.kind === 'ps5' ? '🎮' : st.kind === 'ps4' ? '🕹️' : '🎱'}
@@ -548,7 +548,7 @@ export default function CounterPage() {
                       </div>
                     </div>
 
-                    <div className="flex w-full items-center justify-between gap-2 text-left sm:block sm:w-auto sm:text-right">
+                    <div className={`flex items-center justify-between gap-2 ${openSession ? 'w-auto flex-col text-right' : 'w-full text-left sm:block sm:w-auto sm:text-right'}`}>
                       <span
                         className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9px] font-bold sm:gap-1.5 sm:px-2.5 sm:text-[11px] ${openSession
                           ? isPaused
@@ -625,7 +625,7 @@ export default function CounterPage() {
                   ) : (
                     <div className="space-y-2">
                       {/* Big Quick Touch Adjust Buttons */}
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      <div className="grid grid-cols-3 gap-2">
                         <ActionButton
                           feedbackMs={110}
                           aria-label="Remove one game"
@@ -644,14 +644,14 @@ export default function CounterPage() {
                         </ActionButton>
                         <ActionButton
                           onClick={() => setActiveEndSession(openSession)}
-                          className="btn col-span-2 border border-brand/60 bg-brand/10 text-xs font-bold text-brand hover:bg-brand/20 sm:col-span-1"
+                          className="btn border border-brand/60 bg-brand/10 text-xs font-bold text-brand hover:bg-brand/20"
                         >
                           {t('End')}
                         </ActionButton>
                       </div>
 
                       {/* Micro actions: Snacks, Pause, FIFA rules, Handover */}
-                      <div className="grid grid-cols-2 gap-1 text-[10px] sm:grid-cols-3 sm:text-[11px]">
+                      <div className="grid grid-cols-3 gap-1 text-[10px] sm:text-[11px]">
                         <ActionButton
                           onClick={() => setActiveSnackSession(openSession.id)}
                           className="min-h-10 whitespace-normal break-words rounded-lg border border-line bg-surface-elevated px-1 py-1.5 text-center font-semibold leading-tight text-ink-muted transition-colors hover:border-brand/40 hover:text-ink"
