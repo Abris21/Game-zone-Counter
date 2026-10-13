@@ -1,4 +1,5 @@
 'use client'
+import ActionButton from '@/components/ActionButton'
 
 import { useCallback, useEffect, useState } from 'react'
 import { sb } from '@/lib/supabase'
@@ -30,14 +31,24 @@ export default function Bell() {
       setPerm(Notification.permission)
     }
 
+    let cancelled = false
     let channel: ReturnType<typeof sb.channel> | null = null
 
-    sb.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-      load()
+    const subscribeToNotifications = async () => {
+      const { data: { user } } = await sb.auth.getUser()
+      if (!user || cancelled) return
 
-      channel = sb
-        .channel('user-notifications')
+      await load()
+      if (cancelled) return
+
+      const topic = `user-notifications:${user.id}`
+      const staleChannel = sb.getChannels().find((candidate) => candidate.topic === `realtime:${topic}`)
+      if (staleChannel) await sb.removeChannel(staleChannel)
+      if (cancelled) return
+
+      const nextChannel = sb.channel(topic)
+      channel = nextChannel
+      nextChannel
         .on(
           'postgres_changes',
           {
@@ -52,16 +63,19 @@ export default function Bell() {
             if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
               new Notification(newItem.title, {
                 body: newItem.body ?? '',
-                icon: '/icon-192.png',
+                icon: '/logo.png',
               })
             }
           }
         )
         .subscribe()
-    })
+    }
+
+    void subscribeToNotifications()
 
     return () => {
-      if (channel) sb.removeChannel(channel)
+      cancelled = true
+      if (channel) void sb.removeChannel(channel)
     }
   }, [load])
 
@@ -84,7 +98,7 @@ export default function Bell() {
 
   return (
     <div className="relative inline-block">
-      <button
+      <ActionButton
         aria-label={`Notifications, ${unreadCount} unread`}
         onClick={() => setOpen(!open)}
         className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface hover:border-brand/50 text-ink transition-colors"
@@ -95,7 +109,7 @@ export default function Bell() {
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
-      </button>
+      </ActionButton>
 
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-80 max-h-96 overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2">
@@ -103,12 +117,12 @@ export default function Bell() {
           <div className="flex items-center justify-between border-b border-line p-3.5 bg-surface-elevated/50">
             <h3 className="font-display text-sm font-bold text-ink">Notifications</h3>
             {unreadCount > 0 && (
-              <button
+              <ActionButton
                 onClick={markAllRead}
                 className="text-xs font-semibold text-brand hover:underline"
               >
                 Mark all read
-              </button>
+              </ActionButton>
             )}
           </div>
 
@@ -117,9 +131,8 @@ export default function Bell() {
             {notifications.map((item) => (
               <div
                 key={item.id}
-                className={`p-3.5 text-xs transition-colors hover:bg-surface-elevated ${
-                  !item.read_at ? 'bg-surface-elevated/40' : ''
-                }`}
+                className={`p-3.5 text-xs transition-colors hover:bg-surface-elevated ${!item.read_at ? 'bg-surface-elevated/40' : ''
+                  }`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <p className={`font-semibold text-ink ${!item.read_at ? 'text-brand' : ''}`}>
@@ -149,12 +162,12 @@ export default function Bell() {
           {/* Footer */}
           {typeof window !== 'undefined' && 'Notification' in window && perm === 'default' && (
             <div className="border-t border-line p-2 text-center bg-surface-elevated/40">
-              <button
+              <ActionButton
                 onClick={requestPhoneAlerts}
                 className="text-xs font-bold text-brand hover:underline"
               >
                 Enable browser alerts
-              </button>
+              </ActionButton>
             </div>
           )}
         </div>

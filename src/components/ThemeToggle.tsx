@@ -1,4 +1,5 @@
 'use client'
+import ActionButton from '@/components/ActionButton'
 
 import React, { useEffect, useState } from 'react'
 
@@ -51,7 +52,7 @@ export default function ThemeToggle({ compact = true }: ThemeToggleProps) {
   const { theme, toggleTheme } = useTheme()
 
   return (
-    <button
+    <ActionButton
       id="theme-toggle"
       aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
       title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
@@ -73,6 +74,6 @@ export default function ThemeToggle({ compact = true }: ThemeToggleProps) {
           {!compact && <span className="text-ink-muted">Dark</span>}
         </>
       )}
-    </button>
+    </ActionButton>
   )
 }

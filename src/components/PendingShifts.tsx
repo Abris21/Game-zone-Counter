@@ -1,4 +1,5 @@
 'use client'
+import ActionButton from '@/components/ActionButton'
 
 import { useCallback, useEffect, useState } from 'react'
 import { sb, msg, etb } from '@/lib/supabase'
@@ -140,20 +141,20 @@ export default function PendingShifts() {
 
               {/* Actions */}
               <div className="grid grid-cols-2 gap-2 pt-1">
-                <button
+                <ActionButton
                   disabled={busy}
                   onClick={() => setRejectId(s.id)}
                   className="btn btn-secondary text-xs text-bad hover:border-bad/50"
                 >
                   Send Back
-                </button>
-                <button
+                </ActionButton>
+                <ActionButton
                   disabled={busy}
                   onClick={() => handleVerify(s.id, true)}
                   className="btn btn-gold text-xs"
                 >
                   Settle Shift
-                </button>
+                </ActionButton>
               </div>
             </div>
           )
@@ -180,21 +181,21 @@ export default function PendingShifts() {
               className="inp text-sm"
             />
             <div className="grid grid-cols-2 gap-2">
-              <button
+              <ActionButton
                 type="button"
                 onClick={() => setRejectId(null)}
                 className="btn btn-secondary text-xs"
               >
                 Cancel
-              </button>
-              <button
+              </ActionButton>
+              <ActionButton
                 type="button"
                 disabled={busy}
                 onClick={() => handleVerify(rejectId, false, rejectReason)}
                 className="btn bg-bad text-white text-xs hover:bg-bad/80 font-bold"
               >
                 Confirm
-              </button>
+              </ActionButton>
             </div>
           </div>
         </div>

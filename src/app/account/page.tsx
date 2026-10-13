@@ -1,4 +1,5 @@
 'use client'
+import ActionButton from '@/components/ActionButton'
 
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -158,9 +159,9 @@ export default function AccountPage() {
             <span>Role: <b className="capitalize text-brand">{profile?.role.replace('_', ' ')}</b></span>
             {user?.email && <span>{user.email}</span>}
           </div>
-          <button disabled={busy} className="btn btn-gold text-xs">
+          <ActionButton disabled={busy} className="btn btn-gold text-xs">
             Save Name
-          </button>
+          </ActionButton>
         </form>
 
         {/* Change Password */}
@@ -196,9 +197,9 @@ export default function AccountPage() {
               />
             </div>
           </div>
-          <button disabled={busy} className="btn btn-gold text-xs">
+          <ActionButton disabled={busy} className="btn btn-gold text-xs">
             Update Password
-          </button>
+          </ActionButton>
         </form>
 
         {/* Preferences: Language & Calendar */}
@@ -210,7 +211,7 @@ export default function AccountPage() {
           <p className="text-xs text-ink-muted">
             Revoke all active logins and refresh tokens across all mobile and desktop devices.
           </p>
-          <button
+          <ActionButton
             onClick={async () => {
               await sb.auth.signOut({ scope: 'global' })
               router.replace('/login')
@@ -218,7 +219,7 @@ export default function AccountPage() {
             className="btn btn-secondary text-xs text-ink-muted hover:border-bad/40 hover:text-bad"
           >
             Sign Out on All Devices
-          </button>
+          </ActionButton>
         </div>
 
         {/* Danger Zone for Owners */}
@@ -246,9 +247,9 @@ export default function AccountPage() {
                 className="inp text-xs border-bad/40"
               />
             </div>
-            <button className="btn bg-bad text-white text-xs hover:bg-bad/80 font-bold w-full">
+            <ActionButton className="btn bg-bad text-white text-xs hover:bg-bad/80 font-bold w-full">
               Close & Deactivate Game Zone
-            </button>
+            </ActionButton>
           </form>
         )}
       </div>

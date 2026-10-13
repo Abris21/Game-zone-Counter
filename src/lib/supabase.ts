@@ -5,8 +5,39 @@ import { formatETB } from './finance'
 const defaultUrl = 'https://placeholder.supabase.co'
 const defaultKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.placeholder'
 
-export const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || defaultUrl
-export const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || defaultKey
+export const normalizeSupabaseConfig = (url?: string | null, key?: string | null) => {
+  const normalizedUrl = (url || '').trim()
+  const normalizedKey = (key || '').trim()
+  const hasPlaceholderUrl = normalizedUrl.includes('placeholder.supabase.co')
+  const hasPlaceholderKey = normalizedKey.includes('placeholder')
+  const configured = Boolean(
+    normalizedUrl &&
+    normalizedKey &&
+    !hasPlaceholderUrl &&
+    !hasPlaceholderKey &&
+    /^https?:\/\//i.test(normalizedUrl)
+  )
+
+  return {
+    url: normalizedUrl || defaultUrl,
+    anonKey: normalizedKey || defaultKey,
+    configured,
+    reason: configured
+      ? null
+      : 'Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to your environment before enabling login and live data.',
+  }
+}
+
+export const SUPABASE_CONFIG = normalizeSupabaseConfig(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+)
+
+export const SUPABASE_URL = SUPABASE_CONFIG.url
+export const SUPABASE_ANON_KEY = SUPABASE_CONFIG.anonKey
+export const isSupabaseConfigured = (url = SUPABASE_URL, key = SUPABASE_ANON_KEY) =>
+  normalizeSupabaseConfig(url, key).configured
+export const SUPABASE_STATUS_MESSAGE = SUPABASE_CONFIG.reason
 
 export const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
@@ -53,6 +84,14 @@ export const msg = (e: { message: string } | null | undefined): string => {
 export const etb = (n: number | null | undefined): string => formatETB(n)
 
 export const api = async (body: object) => {
+  if (!isSupabaseConfigured()) {
+    return {
+      ok: false,
+      data: null,
+      error: { message: SUPABASE_STATUS_MESSAGE || 'Supabase is not configured.' },
+    }
+  }
+
   const { data: { session } } = await sb.auth.getSession()
   const r = await fetch('/api/users', {
     method: 'POST',

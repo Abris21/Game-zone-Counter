@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { sb, msg } from './supabase'
+import { sb, msg, isSupabaseConfigured, SUPABASE_STATUS_MESSAGE } from './supabase'
+import { setLocalSnapshotScope } from './offline'
 
 export type UserRole = 'super_admin' | 'admin' | 'employee'
 
@@ -43,6 +44,9 @@ export interface AuthState {
 }
 
 let cachedProfile: { userId: string; profile: Profile; timestamp: number } | null = null
+let cachedGuardState: { userId: string; state: Omit<AuthState, 'loading' | 'error'>; timestamp: number } | null = null
+let cachedZone: { zoneId: string; zone: GameZone | null; timestamp: number } | null = null
+const AUTH_CACHE_MS = 30_000
 
 /**
  * Validates the current user session and fetches the verified database profile.
@@ -88,28 +92,41 @@ export async function getVerifiedProfile(forceRefresh = false): Promise<{
  */
 export function useAuthGuard(allowedRoles?: UserRole[]) {
   const router = useRouter()
-  const [state, setState] = useState<AuthState>({
-    user: null,
-    profile: null,
-    zone: null,
-    loading: true,
-    error: null,
+  // Callers commonly pass an inline array; depend on its values rather than
+  // its new reference so rerenders do not restart auth validation.
+  const allowedRoleKey = allowedRoles?.join('|') || ''
+  const [state, setState] = useState<AuthState>(() => {
+    const cached = cachedGuardState
+    if (cached && Date.now() - cached.timestamp < AUTH_CACHE_MS) {
+      setLocalSnapshotScope(cached.userId, cached.state.profile?.zone_id)
+      return { ...cached.state, loading: false, error: null }
+    }
+    return { user: null, profile: null, zone: null, loading: true, error: null }
   })
 
   const check = useCallback(async () => {
+    if (!isSupabaseConfigured()) {
+      setLocalSnapshotScope(null)
+      setState({ user: null, profile: null, zone: null, loading: false, error: SUPABASE_STATUS_MESSAGE || 'Supabase is not configured.' })
+      return
+    }
+
     const { user, profile, error } = await getVerifiedProfile()
     if (!user || !profile) {
+      setLocalSnapshotScope(null)
       router.replace('/login')
       return
     }
 
     if (!profile.is_active || profile.deleted_at) {
+      setLocalSnapshotScope(null)
       await sb.auth.signOut()
       router.replace('/login?error=deactivated')
       return
     }
 
     if (profile.must_change_password && !window.location.pathname.startsWith('/account')) {
+      setLocalSnapshotScope(null)
       router.replace('/account?force=1')
       return
     }
@@ -117,40 +134,53 @@ export function useAuthGuard(allowedRoles?: UserRole[]) {
     // Verify game zone is active for non-super admins
     let zone: GameZone | null = null
     if (profile.role !== 'super_admin' && profile.zone_id) {
-      const { data: zoneData } = await sb
-        .from('game_zones')
-        .select('*')
-        .eq('id', profile.zone_id)
-        .single()
-      
-      zone = zoneData as GameZone | null
+      if (cachedZone?.zoneId === profile.zone_id && Date.now() - cachedZone.timestamp < AUTH_CACHE_MS) {
+        zone = cachedZone.zone
+      } else {
+        const { data: zoneData } = await sb
+          .from('game_zones')
+          .select('*')
+          .eq('id', profile.zone_id)
+          .single()
+        zone = zoneData as GameZone | null
+        cachedZone = { zoneId: profile.zone_id, zone, timestamp: Date.now() }
+      }
       if (zone?.status === 'suspended') {
+        setLocalSnapshotScope(null)
         await sb.auth.signOut()
         router.replace('/login?error=suspended')
         return
       }
     }
 
-    if (allowedRoles && !allowedRoles.includes(profile.role)) {
+    if (allowedRoleKey && !allowedRoleKey.split('|').includes(profile.role)) {
       const dest = ROLE_HOMES[profile.role] || '/login'
       router.replace(dest)
       return
     }
 
-    setState({
+    const verifiedState = {
       user,
       profile,
       zone,
+    }
+    setLocalSnapshotScope(user.id, profile.zone_id)
+    cachedGuardState = { userId: user.id, state: verifiedState, timestamp: Date.now() }
+    setState({
+      ...verifiedState,
       loading: false,
       error: null,
     })
-  }, [router, allowedRoles])
+  }, [router, allowedRoleKey])
 
   useEffect(() => {
     check()
     const { data: authListener } = sb.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
+        setLocalSnapshotScope(null)
         cachedProfile = null
+        cachedGuardState = null
+        cachedZone = null
         router.replace('/login')
       } else if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
         check()

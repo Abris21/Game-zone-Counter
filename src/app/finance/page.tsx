@@ -1,4 +1,5 @@
 'use client'
+import ActionButton from '@/components/ActionButton'
 
 import React, { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -6,6 +7,7 @@ import { sb, msg, etb } from '@/lib/supabase'
 import { useAuthGuard } from '@/lib/auth'
 import AppLayout from '@/components/AppLayout'
 import EthDate from '@/components/EthDate'
+import { getLocalSnapshot, setLocalSnapshot } from '@/lib/offline'
 import {
   calculateNetProfit,
   addMoney,
@@ -80,6 +82,7 @@ export default function FinancePage() {
   >([])
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [hasLocalSnapshot, setHasLocalSnapshot] = useState(false)
 
   // New expense form state
   const [newExp, setNewExp] = useState({
@@ -96,8 +99,26 @@ export default function FinancePage() {
     day_of_month: '1',
   })
 
+  const hydrateLocalSnapshot = useCallback(() => {
+    const snapReport = getLocalSnapshot<ReportData>('finance_report')
+    const snapExpenses = getLocalSnapshot<Expense[]>('finance_expenses')
+    const snapRecurring = getLocalSnapshot<RecurringExpense[]>('finance_recurring')
+    const snapSnackStats = getLocalSnapshot<{ revenue: number; cost: number }>('finance_snack_stats')
+    const snapEmployeeStats = getLocalSnapshot<typeof employeeStats>('finance_employee_stats')
+
+    let hasAny = false
+    if (snapReport.data) { setReport(snapReport.data); hasAny = true }
+    if (snapExpenses.data) { setExpenses(snapExpenses.data); hasAny = true }
+    if (snapRecurring.data) { setRecurring(snapRecurring.data); hasAny = true }
+    if (snapSnackStats.data) { setSnackStats(snapSnackStats.data); hasAny = true }
+    if (snapEmployeeStats.data) { setEmployeeStats(snapEmployeeStats.data); hasAny = true }
+    setHasLocalSnapshot(hasAny)
+    return hasAny
+  }, [])
+
   const loadFinanceData = useCallback(async () => {
     if (!profile?.zone_id) return
+    hydrateLocalSnapshot()
     setBusy(true)
 
     // Run scheduled recurring expense generator
@@ -123,19 +144,31 @@ export default function FinancePage() {
       return
     }
 
+    const nextReport = profitRes.data as ReportData
+    const nextExpenses = (expRes.data as Expense[]) || []
+    const nextRecurring = (recRes.data as RecurringExpense[]) || []
+    const nextSnackStats = (snackRes.data as { revenue: number; cost: number }) || { revenue: 0, cost: 0 }
+    const nextEmployeeStats = (empRes.data as typeof employeeStats) || []
+
     setErr('')
-    setReport(profitRes.data as ReportData)
-    setExpenses((expRes.data as Expense[]) || [])
-    setRecurring((recRes.data as RecurringExpense[]) || [])
-    setSnackStats(
-      (snackRes.data as { revenue: number; cost: number }) || { revenue: 0, cost: 0 }
-    )
-    setEmployeeStats((empRes.data as typeof employeeStats) || [])
-  }, [profile?.zone_id, fromDate, toDate])
+    setReport(nextReport)
+    setExpenses(nextExpenses)
+    setRecurring(nextRecurring)
+    setSnackStats(nextSnackStats)
+    setEmployeeStats(nextEmployeeStats)
+    setLocalSnapshot('finance_report', nextReport)
+    setLocalSnapshot('finance_expenses', nextExpenses)
+    setLocalSnapshot('finance_recurring', nextRecurring)
+    setLocalSnapshot('finance_snack_stats', nextSnackStats)
+    setLocalSnapshot('finance_employee_stats', nextEmployeeStats)
+  }, [profile?.zone_id, fromDate, toDate, hydrateLocalSnapshot])
 
   useEffect(() => {
-    if (profile) loadFinanceData()
-  }, [profile, loadFinanceData])
+    if (profile) {
+      hydrateLocalSnapshot()
+      void loadFinanceData()
+    }
+  }, [profile, loadFinanceData, hydrateLocalSnapshot])
 
   const handleAction = async (promise: PromiseLike<{ error: { message: string } | null }>, cb?: () => void) => {
     setBusy(true)
@@ -191,10 +224,14 @@ export default function FinancePage() {
     window.print()
   }
 
-  if (loading) {
+  if (loading && !hasLocalSnapshot) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-bg text-ink">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+      <div className="flex min-h-dvh items-center justify-center bg-bg px-4 text-ink">
+        <div className="surface-card w-full max-w-sm p-6 text-center shadow-2xl shadow-brand/10">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-3 border-brand border-t-transparent" />
+          <p className="font-display text-lg font-bold text-ink">Loading finance view…</p>
+          <p className="mt-1 text-xs text-ink-muted">Gathering sales, costs, and report data.</p>
+        </div>
       </div>
     )
   }
@@ -208,12 +245,12 @@ export default function FinancePage() {
       onRefresh={loadFinanceData}
       action={
         <div className="flex items-center gap-2">
-          <button onClick={exportCSV} className="btn btn-secondary text-xs h-9 px-3">
+          <ActionButton onClick={exportCSV} className="btn btn-secondary text-xs h-9 px-3">
             📥 Export CSV
-          </button>
-          <button onClick={exportPDF} className="btn btn-outline-gold text-xs h-9 px-3">
+          </ActionButton>
+          <ActionButton onClick={exportPDF} className="btn btn-outline-gold text-xs h-9 px-3">
             🖨️ Print Report
-          </button>
+          </ActionButton>
         </div>
       }
     >
@@ -226,25 +263,24 @@ export default function FinancePage() {
 
         {/* Date Filter Tabs */}
         <div className="surface-card p-4 space-y-3">
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[
               ['today', 'Today'],
               ['week', 'This Week'],
               ['month', 'This Month'],
               ['custom', 'Custom'],
             ].map(([k, label]) => (
-              <button
+              <ActionButton
                 key={k}
                 onClick={() => {
                   setPeriod(k)
                   if (k !== 'custom') setDateRange(getRange(k))
                 }}
-                className={`btn text-xs font-bold py-2 ${
-                  period === k ? 'btn-gold' : 'btn-secondary text-ink-muted'
-                }`}
+                className={`btn text-xs font-bold py-2 ${period === k ? 'btn-gold' : 'btn-secondary text-ink-muted'
+                  }`}
               >
                 {label}
-              </button>
+              </ActionButton>
             ))}
           </div>
 
@@ -314,17 +350,15 @@ export default function FinancePage() {
           </div>
 
           <div
-            className={`surface-card p-4 space-y-1 ${
-              netProfit >= 0 ? 'border-ok/50 bg-ok/5' : 'border-bad/50 bg-bad/5'
-            }`}
+            className={`surface-card p-4 space-y-1 ${netProfit >= 0 ? 'border-ok/50 bg-ok/5' : 'border-bad/50 bg-bad/5'
+              }`}
           >
             <p className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">
               {netProfit >= 0 ? 'Net Operating Profit' : 'Net Operating Loss'}
             </p>
             <p
-              className={`font-display text-2xl font-extrabold truncate ${
-                netProfit >= 0 ? 'text-ok' : 'text-bad'
-              }`}
+              className={`font-display text-2xl font-extrabold truncate ${netProfit >= 0 ? 'text-ok' : 'text-bad'
+                }`}
             >
               {etb(Math.abs(netProfit))}
             </p>
@@ -510,9 +544,9 @@ export default function FinancePage() {
                 placeholder="Note / Receipt info"
                 className="inp text-xs"
               />
-              <button disabled={busy} className="btn btn-gold col-span-2 text-xs">
+              <ActionButton disabled={busy} className="btn btn-gold col-span-2 text-xs">
                 + Add Expense
-              </button>
+              </ActionButton>
             </form>
 
             <div className="max-h-60 overflow-y-auto space-y-2 divide-y divide-line/60">
@@ -526,7 +560,7 @@ export default function FinancePage() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="font-bold text-bad">{etb(exp.amount)}</span>
-                    <button
+                    <ActionButton
                       onClick={() =>
                         confirm('Delete this expense record?') &&
                         handleAction(
@@ -539,7 +573,7 @@ export default function FinancePage() {
                       className="text-bad hover:underline"
                     >
                       ✕
-                    </button>
+                    </ActionButton>
                   </div>
                 </div>
               ))}
@@ -600,9 +634,9 @@ export default function FinancePage() {
                 placeholder="Day 1-28"
                 className="inp text-xs"
               />
-              <button disabled={busy} className="btn btn-gold col-span-3 text-xs">
+              <ActionButton disabled={busy} className="btn btn-gold col-span-3 text-xs">
                 + Schedule Monthly Expense
-              </button>
+              </ActionButton>
             </form>
 
             <div className="space-y-2">
@@ -617,7 +651,7 @@ export default function FinancePage() {
                       · {etb(rec.amount)} on day {rec.day_of_month}
                     </span>
                   </div>
-                  <button
+                  <ActionButton
                     onClick={() =>
                       handleAction(
                         sb.from('recurring_expenses').update({ is_active: false }).eq('id', rec.id)
@@ -626,7 +660,7 @@ export default function FinancePage() {
                     className="text-bad hover:underline font-semibold"
                   >
                     Stop
-                  </button>
+                  </ActionButton>
                 </div>
               ))}
               {recurring.length === 0 && (

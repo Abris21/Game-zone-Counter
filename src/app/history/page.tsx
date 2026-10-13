@@ -1,4 +1,5 @@
 'use client'
+import ActionButton from '@/components/ActionButton'
 
 import React, { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -6,6 +7,7 @@ import { sb, msg, etb } from '@/lib/supabase'
 import { useAuthGuard } from '@/lib/auth'
 import AppLayout from '@/components/AppLayout'
 import EthDate from '@/components/EthDate'
+import { getLocalSnapshot, setLocalSnapshot } from '@/lib/offline'
 
 interface SessionHistoryItem {
   id: string
@@ -51,8 +53,22 @@ export default function HistoryPage() {
   const [dialog, setDialog] = useState<ActionDialog | null>(null)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [hasLocalSnapshot, setHasLocalSnapshot] = useState(false)
+
+  const hydrateLocalSnapshot = useCallback(() => {
+    const snapSessions = getLocalSnapshot<SessionHistoryItem[]>('history_sessions')
+    const snapSales = getLocalSnapshot<SaleHistoryItem[]>('history_sales')
+    const snapEmployeeNames = getLocalSnapshot<Record<string, string>>('history_employee_names')
+    let hasAny = false
+    if (snapSessions.data) { setSessions(snapSessions.data); hasAny = true }
+    if (snapSales.data) { setSales(snapSales.data); hasAny = true }
+    if (snapEmployeeNames.data) { setEmployeeNames(snapEmployeeNames.data); hasAny = true }
+    setHasLocalSnapshot(hasAny)
+    return hasAny
+  }, [])
 
   const loadHistory = useCallback(async () => {
+    hydrateLocalSnapshot()
     setBusy(true)
     const dayStart = new Date(date + 'T00:00:00')
     const dayEnd = new Date(dayStart)
@@ -82,19 +98,24 @@ export default function HistoryPage() {
       return
     }
 
-    setErr('')
-    setSessions((sesRes.data as unknown as SessionHistoryItem[]) || [])
-    setSales((saleRes.data as SaleHistoryItem[]) || [])
-    setEmployeeNames(
-      Object.fromEntries(
-        ((profRes.data || []) as { id: string; full_name: string }[]).map((p) => [p.id, p.full_name])
-      )
+    const nextSessions = (sesRes.data as unknown as SessionHistoryItem[]) || []
+    const nextSales = (saleRes.data as SaleHistoryItem[]) || []
+    const nextEmployeeNames = Object.fromEntries(
+      ((profRes.data || []) as { id: string; full_name: string }[]).map((p) => [p.id, p.full_name])
     )
-  }, [date])
+    setErr('')
+    setSessions(nextSessions)
+    setSales(nextSales)
+    setEmployeeNames(nextEmployeeNames)
+    setLocalSnapshot('history_sessions', nextSessions)
+    setLocalSnapshot('history_sales', nextSales)
+    setLocalSnapshot('history_employee_names', nextEmployeeNames)
+  }, [date, hydrateLocalSnapshot])
 
   useEffect(() => {
-    loadHistory()
-  }, [loadHistory])
+    hydrateLocalSnapshot()
+    void loadHistory()
+  }, [loadHistory, hydrateLocalSnapshot])
 
   const handleConfirmAction = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -133,10 +154,14 @@ export default function HistoryPage() {
     }
   }
 
-  if (loading) {
+  if (loading && !hasLocalSnapshot) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-bg text-ink">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+      <div className="flex min-h-dvh items-center justify-center bg-bg px-4 text-ink">
+        <div className="surface-card w-full max-w-sm p-6 text-center shadow-2xl shadow-brand/10">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-3 border-brand border-t-transparent" />
+          <p className="font-display text-lg font-bold text-ink">Loading history…</p>
+          <p className="mt-1 text-xs text-ink-muted">Fetching prior sessions and sales records.</p>
+        </div>
       </div>
     )
   }
@@ -170,22 +195,20 @@ export default function HistoryPage() {
             </div>
 
             <div className="flex rounded-xl bg-surface-elevated p-1 border border-line">
-              <button
+              <ActionButton
                 onClick={() => setActiveTab('sessions')}
-                className={`rounded-lg px-4 py-1.5 text-xs font-bold transition-all ${
-                  activeTab === 'sessions' ? 'bg-brand text-bg shadow-glow-sm' : 'text-ink-muted'
-                }`}
+                className={`rounded-lg px-4 py-1.5 text-xs font-bold transition-all ${activeTab === 'sessions' ? 'bg-brand text-bg shadow-glow-sm' : 'text-ink-muted'
+                  }`}
               >
                 Sessions ({sessions.length})
-              </button>
-              <button
+              </ActionButton>
+              <ActionButton
                 onClick={() => setActiveTab('sales')}
-                className={`rounded-lg px-4 py-1.5 text-xs font-bold transition-all ${
-                  activeTab === 'sales' ? 'bg-brand text-bg shadow-glow-sm' : 'text-ink-muted'
-                }`}
+                className={`rounded-lg px-4 py-1.5 text-xs font-bold transition-all ${activeTab === 'sales' ? 'bg-brand text-bg shadow-glow-sm' : 'text-ink-muted'
+                  }`}
               >
                 Snack Sales ({sales.length})
-              </button>
+              </ActionButton>
             </div>
           </div>
         </div>
@@ -198,9 +221,8 @@ export default function HistoryPage() {
               return (
                 <div
                   key={s.id}
-                  className={`surface-card p-4 space-y-2.5 transition-colors ${
-                    isVoided ? 'opacity-60 border-bad/30' : ''
-                  }`}
+                  className={`surface-card p-4 space-y-2.5 transition-colors ${isVoided ? 'opacity-60 border-bad/30' : ''
+                    }`}
                 >
                   <div className="flex items-center justify-between">
                     <div>
@@ -213,9 +235,8 @@ export default function HistoryPage() {
                     </div>
 
                     <span
-                      className={`font-display text-base font-bold ${
-                        isVoided ? 'text-bad line-through' : 'text-brand'
-                      }`}
+                      className={`font-display text-base font-bold ${isVoided ? 'text-bad line-through' : 'text-brand'
+                        }`}
                     >
                       {isVoided ? 'Voided' : etb(s.total_amount)}
                     </span>
@@ -232,7 +253,7 @@ export default function HistoryPage() {
 
                     {s.status === 'ended' && (
                       <div className="flex items-center gap-3">
-                        <button
+                        <ActionButton
                           onClick={() =>
                             setDialog({
                               kind: 'edit_session',
@@ -245,8 +266,8 @@ export default function HistoryPage() {
                           className="text-brand hover:underline font-semibold"
                         >
                           Edit
-                        </button>
-                        <button
+                        </ActionButton>
+                        <ActionButton
                           onClick={() =>
                             setDialog({
                               kind: 'void_session',
@@ -259,7 +280,7 @@ export default function HistoryPage() {
                           className="text-bad hover:underline font-semibold"
                         >
                           Void
-                        </button>
+                        </ActionButton>
                       </div>
                     )}
                   </div>
@@ -281,9 +302,8 @@ export default function HistoryPage() {
               return (
                 <div
                   key={sl.id}
-                  className={`surface-card p-4 space-y-2.5 transition-colors ${
-                    isVoided ? 'opacity-60 border-bad/30' : ''
-                  }`}
+                  className={`surface-card p-4 space-y-2.5 transition-colors ${isVoided ? 'opacity-60 border-bad/30' : ''
+                    }`}
                 >
                   <div className="flex items-center justify-between">
                     <div>
@@ -299,9 +319,8 @@ export default function HistoryPage() {
                     </div>
 
                     <span
-                      className={`font-display text-base font-bold ${
-                        isVoided ? 'text-bad line-through' : 'text-brand'
-                      }`}
+                      className={`font-display text-base font-bold ${isVoided ? 'text-bad line-through' : 'text-brand'
+                        }`}
                     >
                       {isVoided ? 'Voided' : etb(sl.total)}
                     </span>
@@ -316,7 +335,7 @@ export default function HistoryPage() {
                     </div>
 
                     {!isVoided && (
-                      <button
+                      <ActionButton
                         onClick={() =>
                           setDialog({
                             kind: 'void_sale',
@@ -329,7 +348,7 @@ export default function HistoryPage() {
                         className="text-bad hover:underline font-semibold"
                       >
                         Void Sale
-                      </button>
+                      </ActionButton>
                     )}
                   </div>
                 </div>
@@ -357,8 +376,8 @@ export default function HistoryPage() {
               {dialog.kind === 'edit_session'
                 ? 'Edit Session'
                 : dialog.kind === 'void_session'
-                ? 'Void Session'
-                : 'Void Snack Sale'}
+                  ? 'Void Session'
+                  : 'Void Snack Sale'}
             </h3>
 
             <form onSubmit={handleConfirmAction} className="space-y-3">
@@ -414,16 +433,16 @@ export default function HistoryPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-2 pt-2">
-                <button
+                <ActionButton
                   type="button"
                   onClick={() => setDialog(null)}
                   className="btn btn-secondary text-xs"
                 >
                   Cancel
-                </button>
-                <button disabled={busy} className="btn btn-gold text-xs">
+                </ActionButton>
+                <ActionButton disabled={busy} className="btn btn-gold text-xs">
                   {busy ? 'Saving…' : 'Confirm'}
-                </button>
+                </ActionButton>
               </div>
             </form>
           </div>

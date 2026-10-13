@@ -1,10 +1,12 @@
 'use client'
+import ActionButton from '@/components/ActionButton'
 
 import React, { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { sb, api, msg, etb } from '@/lib/supabase'
 import { useAuthGuard } from '@/lib/auth'
 import AppLayout from '@/components/AppLayout'
+import { getLocalSnapshot, setLocalSnapshot } from '@/lib/offline'
 
 interface Station {
   id: string
@@ -21,6 +23,19 @@ interface Employee {
   is_active: boolean
 }
 
+interface StationEdit {
+  id: string
+  name: string
+  kind: string
+  price: string
+}
+
+interface EmployeeEdit {
+  id: string
+  full_name: string
+  username: string
+}
+
 export default function ManagePage() {
   const router = useRouter()
   const { user, profile, zone, loading } = useAuthGuard(['admin', 'super_admin'])
@@ -30,6 +45,9 @@ export default function ManagePage() {
   const [typePrices, setTypePrices] = useState<Record<string, number>>({})
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [editingStation, setEditingStation] = useState<StationEdit | null>(null)
+  const [editingEmployee, setEditingEmployee] = useState<EmployeeEdit | null>(null)
+  const [hasLocalSnapshot, setHasLocalSnapshot] = useState(false)
 
   // New unit form
   const [newStation, setNewStation] = useState({
@@ -49,8 +67,22 @@ export default function ManagePage() {
   const [resetEmp, setResetEmp] = useState<Employee | null>(null)
   const [newPassword, setNewPassword] = useState('')
 
+  const hydrateLocalSnapshot = useCallback(() => {
+    const snapStations = getLocalSnapshot<Station[]>('manage_stations')
+    const snapEmployees = getLocalSnapshot<Employee[]>('manage_employees')
+    const snapTypePrices = getLocalSnapshot<Record<string, number>>('manage_type_prices')
+
+    let hasAny = false
+    if (snapStations.data) { setStations(snapStations.data); hasAny = true }
+    if (snapEmployees.data) { setEmployees(snapEmployees.data); hasAny = true }
+    if (snapTypePrices.data) { setTypePrices(snapTypePrices.data); hasAny = true }
+    setHasLocalSnapshot(hasAny)
+    return hasAny
+  }, [])
+
   const loadData = useCallback(async () => {
     if (!profile?.zone_id) return
+    hydrateLocalSnapshot()
     setBusy(true)
 
     const [stRes, empRes, upRes] = await Promise.all([
@@ -73,18 +105,25 @@ export default function ManagePage() {
       return
     }
 
-    setStations((stRes.data as Station[]) || [])
-    setEmployees((empRes.data as Employee[]) || [])
-    setTypePrices(
-      Object.fromEntries(
-        ((upRes.data || []) as { kind: string; price: number }[]).map((x) => [x.kind, Number(x.price)])
-      )
+    const nextStations = (stRes.data as Station[]) || []
+    const nextEmployees = (empRes.data as Employee[]) || []
+    const nextTypePrices = Object.fromEntries(
+      ((upRes.data || []) as { kind: string; price: number }[]).map((x) => [x.kind, Number(x.price)])
     )
-  }, [profile?.zone_id])
+    setStations(nextStations)
+    setEmployees(nextEmployees)
+    setTypePrices(nextTypePrices)
+    setLocalSnapshot('manage_stations', nextStations)
+    setLocalSnapshot('manage_employees', nextEmployees)
+    setLocalSnapshot('manage_type_prices', nextTypePrices)
+  }, [profile?.zone_id, hydrateLocalSnapshot])
 
   useEffect(() => {
-    if (profile) loadData()
-  }, [profile, loadData])
+    if (profile) {
+      hydrateLocalSnapshot()
+      void loadData()
+    }
+  }, [profile, loadData, hydrateLocalSnapshot])
 
   const handleAction = async (
     promise: PromiseLike<{ error: { message: string } | null }>,
@@ -97,7 +136,7 @@ export default function ManagePage() {
       setErr(msg(error))
     } else {
       cb?.()
-      loadData()
+      await loadData()
     }
   }
 
@@ -165,8 +204,8 @@ export default function ManagePage() {
   }
 
   // Toggle Employee Active State
-  const handleToggleActive = async (emp: Employee) => {
-    handleAction(
+  const handleToggleActive = (emp: Employee) => {
+    return handleAction(
       api({
         action: 'set_active',
         id: emp.id,
@@ -175,10 +214,63 @@ export default function ManagePage() {
     )
   }
 
-  if (loading) {
+  const handleSaveStation = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingStation) return
+    const { id, name, kind, price } = editingStation
+    const amount = Number(price)
+    if (!name.trim() || !Number.isFinite(amount) || amount < 0) {
+      setErr('Enter a station name and a valid non-negative price.')
+      return
+    }
+    handleAction(
+      sb.from('stations').update({
+        name: name.trim(),
+        kind,
+        price: amount,
+        price_override: amount,
+      }).eq('id', id),
+      () => setEditingStation(null)
+    )
+  }
+
+  const handleSaveEmployee = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingEmployee) return
+    setBusy(true)
+    setErr('')
+    const res = await api({
+      action: 'update_employee',
+      id: editingEmployee.id,
+      username: editingEmployee.username.trim().toLowerCase(),
+      full_name: editingEmployee.full_name.trim(),
+    })
+    setBusy(false)
+    if (res.error) setErr(msg(res.error))
+    else {
+      setEditingEmployee(null)
+      await loadData()
+    }
+  }
+
+  const handleDeleteEmployee = async (emp: Employee) => {
+    if (!confirm(`Delete ${emp.full_name}'s account? They will lose access, and their historical records will be kept.`)) return
+    setBusy(true)
+    setErr('')
+    const res = await api({ action: 'delete_employee', id: emp.id })
+    setBusy(false)
+    if (res.error) setErr(msg(res.error))
+    else await loadData()
+  }
+
+  if (loading && !hasLocalSnapshot) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-bg text-ink">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+      <div className="flex min-h-dvh items-center justify-center bg-bg px-4 text-ink">
+        <div className="surface-card w-full max-w-sm p-6 text-center shadow-2xl shadow-brand/10">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-3 border-brand border-t-transparent" />
+          <p className="font-display text-lg font-bold text-ink">Loading management view…</p>
+          <p className="mt-1 text-xs text-ink-muted">Pulling station and employee data.</p>
+        </div>
       </div>
     )
   }
@@ -207,7 +299,7 @@ export default function ManagePage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid gap-3 sm:grid-cols-3">
             {[
               ['ps5', 'PlayStation 5'],
               ['ps4', 'PlayStation 4'],
@@ -265,18 +357,62 @@ export default function ManagePage() {
               >
                 <div className="flex items-start justify-between">
                   <div>
-                    <h3 className="font-display text-base font-bold text-ink">{s.name}</h3>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">
-                      {s.kind.toUpperCase()} ·{' '}
-                      {s.price_override != null ? 'Custom Unit Price' : 'Default Type Price'}
-                    </p>
+                    {editingStation?.id === s.id ? (
+                      <form onSubmit={handleSaveStation} className="space-y-2">
+                        <input
+                          required
+                          aria-label="Station name"
+                          value={editingStation.name}
+                          onChange={(e) => setEditingStation({ ...editingStation, name: e.target.value })}
+                          className="inp h-8 text-xs"
+                        />
+                        <div className="flex gap-2">
+                          <select
+                            aria-label="Station type"
+                            value={editingStation.kind}
+                            onChange={(e) => setEditingStation({ ...editingStation, kind: e.target.value })}
+                            className="inp h-8 text-xs"
+                          >
+                            <option value="ps5">PS5</option>
+                            <option value="ps4">PS4</option>
+                            <option value="pool">Pool</option>
+                            <option value="other">Other</option>
+                          </select>
+                          <input
+                            required
+                            type="number"
+                            min="0"
+                            aria-label="Price per game"
+                            value={editingStation.price}
+                            onChange={(e) => setEditingStation({ ...editingStation, price: e.target.value })}
+                            className="inp h-8 text-xs"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <ActionButton type="submit" disabled={busy} className="btn btn-gold h-8 min-h-8 px-3 text-xs">
+                            Save Changes
+                          </ActionButton>
+                          <ActionButton type="button" onClick={() => setEditingStation(null)} className="btn btn-secondary h-8 min-h-8 px-3 text-xs">
+                            Cancel
+                          </ActionButton>
+                        </div>
+                      </form>
+                    ) : (
+                      <>
+                        <h3 className="font-display text-base font-bold text-ink">{s.name}</h3>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">
+                          {s.kind.toUpperCase()} ·{' '}
+                          {s.price_override != null ? 'Custom Unit Price' : 'Default Type Price'}
+                        </p>
+                      </>
+                    )}
                   </div>
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-surface-elevated text-xs border border-line">
                     🎮
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2 pt-2 border-t border-line/60">
+                <div className={`flex items-center gap-2 pt-2 border-t border-line/60 ${editingStation?.id === s.id ? 'hidden' : ''}`}>
                   <div className="flex-1">
                     <label className="text-[10px] text-ink-dim uppercase font-bold">Price / Game</label>
                     <input
@@ -298,7 +434,7 @@ export default function ManagePage() {
                   </div>
 
                   {s.price_override != null && (
-                    <button
+                    <ActionButton
                       onClick={() =>
                         handleAction(
                           sb.from('stations').update({ price_override: null }).eq('id', s.id)
@@ -307,20 +443,28 @@ export default function ManagePage() {
                       className="text-[11px] text-brand hover:underline mt-3 shrink-0"
                     >
                       Use Type Price
-                    </button>
+                    </ActionButton>
                   )}
 
-                  <button
+                  <ActionButton
+                    disabled={busy}
+                    onClick={() => setEditingStation({ id: s.id, name: s.name, kind: s.kind, price: String(s.price) })}
+                    className="text-xs text-brand hover:underline mt-3 shrink-0"
+                  >
+                    Edit
+                  </ActionButton>
+
+                  <ActionButton
                     onClick={() =>
-                      confirm(`Archive ${s.name}? Past records will remain intact.`) &&
+                      confirm(`Delete ${s.name} from active units? Past records will remain intact.`) &&
                       handleAction(
                         sb.from('stations').update({ is_archived: true }).eq('id', s.id)
                       )
                     }
                     className="text-xs text-bad hover:underline mt-3 shrink-0"
                   >
-                    Archive
-                  </button>
+                    Delete
+                  </ActionButton>
                 </div>
               </div>
             ))}
@@ -360,9 +504,9 @@ export default function ManagePage() {
                 className="inp text-xs"
               />
             </div>
-            <button disabled={busy} className="btn btn-gold text-xs">
+            <ActionButton disabled={busy} className="btn btn-gold text-xs">
               + Add Console Station
-            </button>
+            </ActionButton>
           </form>
         </section>
 
@@ -388,11 +532,10 @@ export default function ManagePage() {
                       <p className="text-xs text-ink-dim">@{emp.username}</p>
                     </div>
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        emp.is_active
-                          ? 'bg-ok/20 text-ok border border-ok/40'
-                          : 'bg-bad/20 text-bad border border-bad/40'
-                      }`}
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${emp.is_active
+                        ? 'bg-ok/20 text-ok border border-ok/40'
+                        : 'bg-bad/20 text-bad border border-bad/40'
+                        }`}
                     >
                       {emp.is_active ? 'Active' : 'Deactivated'}
                     </span>
@@ -400,7 +543,13 @@ export default function ManagePage() {
                 </div>
 
                 <div className="pt-2 border-t border-line/60 flex items-center justify-between text-xs">
-                  <button
+                  <ActionButton
+                    onClick={() => setEditingEmployee({ id: emp.id, full_name: emp.full_name, username: emp.username })}
+                    className="text-brand hover:underline font-semibold"
+                  >
+                    Edit
+                  </ActionButton>
+                  <ActionButton
                     onClick={() => {
                       setResetEmp(emp)
                       setNewPassword('')
@@ -408,16 +557,21 @@ export default function ManagePage() {
                     className="text-brand hover:underline font-semibold"
                   >
                     Reset Password
-                  </button>
+                  </ActionButton>
 
-                  <button
+                  <ActionButton
                     onClick={() => handleToggleActive(emp)}
-                    className={`font-semibold hover:underline ${
-                      emp.is_active ? 'text-bad' : 'text-ok'
-                    }`}
+                    className={`font-semibold hover:underline ${emp.is_active ? 'text-bad' : 'text-ok'
+                      }`}
                   >
                     {emp.is_active ? 'Deactivate' : 'Activate'}
-                  </button>
+                  </ActionButton>
+                  <ActionButton
+                    onClick={() => handleDeleteEmployee(emp)}
+                    className="font-semibold text-bad hover:underline"
+                  >
+                    Delete
+                  </ActionButton>
                 </div>
               </div>
             ))}
@@ -455,9 +609,9 @@ export default function ManagePage() {
                 className="inp text-xs"
               />
             </div>
-            <button disabled={busy} className="btn btn-gold text-xs">
+            <ActionButton disabled={busy} className="btn btn-gold text-xs">
               Create Employee Login
-            </button>
+            </ActionButton>
           </form>
         </section>
       </div>
@@ -487,19 +641,43 @@ export default function ManagePage() {
                 className="inp text-xs"
               />
               <div className="grid grid-cols-2 gap-2">
-                <button
+                <ActionButton
                   type="button"
                   onClick={() => setResetEmp(null)}
                   className="btn btn-secondary text-xs"
                 >
                   Cancel
-                </button>
-                <button disabled={busy} className="btn btn-gold text-xs">
+                </ActionButton>
+                <ActionButton disabled={busy} className="btn btn-gold text-xs">
                   Save Password
-                </button>
+                </ActionButton>
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {editingEmployee && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+        >
+          <form onSubmit={handleSaveEmployee} className="w-full max-w-sm rounded-3xl border border-line bg-surface p-5 shadow-2xl space-y-4">
+            <h3 className="font-display text-lg font-bold text-ink">Edit Employee</h3>
+            <label className="block space-y-1 text-xs text-ink-muted">
+              <span>Full name</span>
+              <input required value={editingEmployee.full_name} onChange={(e) => setEditingEmployee({ ...editingEmployee, full_name: e.target.value })} className="inp text-xs" />
+            </label>
+            <label className="block space-y-1 text-xs text-ink-muted">
+              <span>Username</span>
+              <input required minLength={3} maxLength={30} pattern="[a-zA-Z0-9._-]+" value={editingEmployee.username} onChange={(e) => setEditingEmployee({ ...editingEmployee, username: e.target.value })} className="inp text-xs" />
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <ActionButton type="button" onClick={() => setEditingEmployee(null)} className="btn btn-secondary text-xs">Cancel</ActionButton>
+              <ActionButton type="submit" disabled={busy} className="btn btn-gold text-xs">Save Changes</ActionButton>
+            </div>
+          </form>
         </div>
       )}
     </AppLayout>

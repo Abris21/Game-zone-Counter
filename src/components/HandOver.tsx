@@ -1,4 +1,5 @@
 'use client'
+import ActionButton from '@/components/ActionButton'
 
 import { useEffect, useState } from 'react'
 import { sb, msg } from '@/lib/supabase'
@@ -66,12 +67,12 @@ export default function HandOver({
               Transfer games, snacks and cash to colleague's shift
             </p>
           </div>
-          <button
+          <ActionButton
             onClick={onClose}
             className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface-elevated text-sm text-ink-muted hover:text-ink"
           >
             ✕
-          </button>
+          </ActionButton>
         </div>
 
         {err && (
@@ -82,7 +83,7 @@ export default function HandOver({
 
         <div className="space-y-2">
           {employees.map((emp) => (
-            <button
+            <ActionButton
               key={emp.id}
               disabled={busy}
               onClick={() => handleHandover(emp.id)}
@@ -90,7 +91,7 @@ export default function HandOver({
             >
               <span>{emp.full_name}</span>
               <span className="text-xs text-brand font-medium">Select →</span>
-            </button>
+            </ActionButton>
           ))}
 
           {employees.length === 0 && !err && (
@@ -100,9 +101,9 @@ export default function HandOver({
           )}
         </div>
 
-        <button onClick={onClose} className="btn btn-secondary w-full text-xs">
+        <ActionButton onClick={onClose} className="btn btn-secondary w-full text-xs">
           Cancel
-        </button>
+        </ActionButton>
       </div>
     </div>
   )

@@ -13,75 +13,79 @@
   color-scheme: dark;
 
   /* App backgrounds */
-  --bg-app:           #0B1220;
-  --bg-surface:       #131E2E;
-  --bg-elevated:      #1B293C;
-  --bg-highlight:     #1E3048;
+  --bg-app: #0B1220;
+  --bg-surface: #131E2E;
+  --bg-elevated: #1B293C;
+  --bg-highlight: #1E3048;
 
   /* Typography */
-  --color-ink:        #F8FAFC;
-  --color-ink-muted:  #AAB5C7;
-  --color-ink-dim:    #586579;
+  --color-ink: #F8FAFC;
+  --color-ink-muted: #AAB5C7;
+  --color-ink-dim: #586579;
 
   /* Brand: Champagne Gold */
-  --color-gold:        #D6B779;
-  --color-gold-hover:  #E5CB96;
-  --color-gold-muted:  #94741E;
-  --color-gold-faint:  rgba(214, 183, 121, 0.08);
+  --color-gold: #D6B779;
+  --color-gold-hover: #E5CB96;
+  --color-gold-muted: #94741E;
+  --color-gold-faint: rgba(214, 183, 121, 0.08);
 
   /* Status */
-  --color-ok:       #34D399;
-  --color-warning:  #FBBF24;
-  --color-bad:      #FB7185;
+  --color-ok: #34D399;
+  --color-warning: #FBBF24;
+  --color-bad: #FB7185;
 
   /* PlayStation accents */
-  --color-ps-blue:  #00439C;
-  --color-ps-cyan:  #0070D1;
+  --color-ps-blue: #00439C;
+  --color-ps-cyan: #0070D1;
 
   /* Borders */
-  --border-line:      #1E2D42;
+  --border-line: #1E2D42;
   --border-line-gold: #544622;
 
   /* Shadows */
-  --shadow-glow:     0 0 20px -3px rgba(214, 183, 121, 0.25);
-  --shadow-glow-sm:  0 0 10px -2px rgba(214, 183, 121, 0.18);
+  --shadow-glow: 0 0 20px -3px rgba(214, 183, 121, 0.25);
+  --shadow-glow-sm: 0 0 10px -2px rgba(214, 183, 121, 0.18);
 }
 
 /* Light Mode — Spec Colors */
 .light {
   color-scheme: light;
 
-  --bg-app:           #F5F7FA;
-  --bg-surface:       #FFFFFF;
-  --bg-elevated:      #EAF0F6;
-  --bg-highlight:     #DDE7F0;
+  --bg-app: #F5F7FA;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #EAF0F6;
+  --bg-highlight: #DDE7F0;
 
-  --color-ink:        #172235;
-  --color-ink-muted:  #586579;
-  --color-ink-dim:    #8A9AAD;
+  --color-ink: #172235;
+  --color-ink-muted: #586579;
+  --color-ink-dim: #8A9AAD;
 
-  --color-gold:        #A78036;
-  --color-gold-hover:  #8A6820;
-  --color-gold-muted:  #C49A42;
-  --color-gold-faint:  rgba(167, 128, 54, 0.10);
+  --color-gold: #A78036;
+  --color-gold-hover: #8A6820;
+  --color-gold-muted: #C49A42;
+  --color-gold-faint: rgba(167, 128, 54, 0.10);
 
-  --color-ok:       #059669;
-  --color-warning:  #D97706;
-  --color-bad:      #E11D48;
+  --color-ok: #059669;
+  --color-warning: #D97706;
+  --color-bad: #E11D48;
 
-  --color-ps-blue:  #003680;
-  --color-ps-cyan:  #005DAF;
+  --color-ps-blue: #003680;
+  --color-ps-cyan: #005DAF;
 
-  --border-line:      #D4DCE6;
+  --border-line: #D4DCE6;
   --border-line-gold: #C49A42;
 
-  --shadow-glow:     0 0 20px -3px rgba(167, 128, 54, 0.2);
-  --shadow-glow-sm:  0 0 10px -2px rgba(167, 128, 54, 0.15);
+  --shadow-glow: 0 0 20px -3px rgba(167, 128, 54, 0.2);
+  --shadow-glow-sm: 0 0 10px -2px rgba(167, 128, 54, 0.15);
 }
 
 /* ============================================================
    BASE STYLES
    ============================================================ */
+
+html {
+  scroll-behavior: smooth;
+}
 
 body {
   background-color: var(--bg-app);
@@ -94,6 +98,14 @@ body {
   font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
   overflow-x: hidden;
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  touch-action: manipulation;
 }
 
 /* Smooth theme transitions */
@@ -112,13 +124,16 @@ body {
   width: 5px;
   height: 5px;
 }
+
 ::-webkit-scrollbar-track {
   background: var(--bg-app);
 }
+
 ::-webkit-scrollbar-thumb {
   background: var(--border-line);
   border-radius: 9999px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-ink-dim);
 }
@@ -127,13 +142,18 @@ body {
    FORM ELEMENTS
    ============================================================ */
 
-input, select, textarea {
+input,
+select,
+textarea {
   color: var(--color-ink);
   background-color: var(--bg-surface);
 }
-input::placeholder, textarea::placeholder {
+
+input::placeholder,
+textarea::placeholder {
   color: var(--color-ink-dim);
 }
+
 select option {
   background-color: var(--bg-surface);
   color: var(--color-ink);
@@ -159,9 +179,11 @@ select option {
   background: transparent;
   border: 1px solid transparent;
 }
+
 .btn:active:not(:disabled) {
   transform: scale(0.96);
 }
+
 .btn:focus-visible,
 input:focus-visible,
 select:focus-visible,
@@ -179,11 +201,13 @@ textarea:focus-visible {
   border: 1px solid rgba(255, 255, 255, 0.15);
   box-shadow: 0 2px 10px -2px rgba(214, 183, 121, 0.35);
 }
+
 .btn-gold:hover:not(:disabled),
 .btn.brand:hover:not(:disabled) {
   filter: brightness(1.08);
   box-shadow: 0 4px 16px -2px rgba(214, 183, 121, 0.45);
 }
+
 .btn-gold:disabled,
 .btn.brand:disabled {
   opacity: 0.45;
@@ -197,6 +221,7 @@ textarea:focus-visible {
   border: 1px solid var(--border-line);
   color: var(--color-ink);
 }
+
 .btn-secondary:hover:not(:disabled) {
   background: var(--bg-highlight);
   border-color: var(--color-ink-dim);
@@ -208,6 +233,7 @@ textarea:focus-visible {
   border: 1px solid rgba(214, 183, 121, 0.4);
   color: var(--color-gold);
 }
+
 .btn-outline-gold:hover:not(:disabled) {
   background: rgba(214, 183, 121, 0.14);
   border-color: var(--color-gold);
@@ -228,6 +254,7 @@ textarea:focus-visible {
   color: var(--color-ink);
   transition: border-color 0.15s, background-color 0.15s;
 }
+
 .inp:focus {
   border-color: var(--color-gold);
   background: var(--bg-elevated);
@@ -243,16 +270,19 @@ textarea:focus-visible {
   border: 1px solid var(--border-line);
   border-radius: 16px;
 }
+
 .surface-card-hover {
   background: var(--bg-surface);
   border: 1px solid var(--border-line);
   border-radius: 16px;
   transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
 }
+
 .surface-card-hover:hover {
   border-color: var(--color-ink-dim);
   transform: translateY(-1px);
 }
+
 .surface-card-gold {
   background: var(--bg-surface);
   border: 1px solid var(--border-line-gold);
@@ -276,11 +306,13 @@ textarea:focus-visible {
   color: var(--color-ok);
   border: 1px solid rgba(52, 211, 153, 0.3);
 }
+
 .badge-offline {
   background: rgba(251, 113, 133, 0.12);
   color: var(--color-bad);
   border: 1px solid rgba(251, 113, 133, 0.3);
 }
+
 .badge-syncing {
   background: rgba(251, 191, 36, 0.12);
   color: var(--color-warning);
@@ -292,6 +324,10 @@ textarea:focus-visible {
    ============================================================ */
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   *,
   ::before,
   ::after {

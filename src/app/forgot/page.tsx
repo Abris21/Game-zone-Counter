@@ -1,4 +1,5 @@
 'use client'
+import ActionButton from '@/components/ActionButton'
 
 import React, { useState } from 'react'
 import Link from 'next/link'
@@ -79,9 +80,9 @@ export default function ForgotPasswordPage() {
                 />
               </div>
 
-              <button disabled={busy} className="btn btn-gold w-full">
+              <ActionButton disabled={busy} className="btn btn-gold w-full">
                 {busy ? 'Sending…' : 'Send Recovery Link'}
-              </button>
+              </ActionButton>
             </form>
           )}
 

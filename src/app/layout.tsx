@@ -1,5 +1,6 @@
 import './globals.css'
 import PwaRegister from '@/components/PwaRegister'
+import NavigationProgress from '@/components/NavigationProgress'
 import { I18nProvider } from '@/lib/i18n'
 import type { Metadata, Viewport } from 'next'
 import { Sora, Inter, Noto_Sans_Ethiopic } from 'next/font/google'
@@ -24,10 +25,10 @@ const ethiopicFont = Noto_Sans_Ethiopic({
 })
 
 export const metadata: Metadata = {
-  title: 'Blackout Game Zone — Counter & Tournament Hub',
-  description: 'Luxury live console counter, shifts, inventory, finance, and tournament management for PlayStation game zones.',
+  title: { default: 'Gamezone Counter', template: '%s | Gamezone Counter' },
+  description: 'Gamezone Counter for live sessions, shifts, inventory, finance, and tournament management.',
   manifest: '/manifest.webmanifest',
-  icons: { apple: '/icon-192.png' },
+  icons: { icon: '/logo.png', apple: '/logo.png' },
 }
 
 export const viewport: Viewport = {
@@ -60,6 +61,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         className={`${soraFont.variable} ${interFont.variable} ${ethiopicFont.variable} font-sans bg-bg text-ink antialiased selection:bg-brand selection:text-bg`}
       >
         <I18nProvider>
+          <NavigationProgress />
           {children}
         </I18nProvider>
         <PwaRegister />

@@ -34,6 +34,13 @@ All schema definitions, functions, and RLS policies are forward-only and safe fo
 10. `supabase/migrations/010_business_settings_and_rules.sql`: Configurable business rules, FIFA tie-break policies, reopen window customization, and shift conflict resolution.
 11. `supabase/migrations/011_session_lifecycle_and_idempotency.sql`: Console pause/resume, FIFA extra time and penalty surcharges, and server-side idempotency keys.
 12. `supabase/migrations/012_tournaments.sql`: Tournaments schema, participant registration, single-elimination bracket generation, match scoring, and prize accounting.
+13. `supabase/migrations/013_idempotent_start_session.sql`: Adds the idempotency-key argument used by queued session starts.
+14. `supabase/migrations/014_realtime_sales.sql`: Enables live sales refreshes on the counter and employee day screens.
+15. `supabase/migrations/015_owner_approval.sql`: Requires super-admin approval before a self-registered owner can access a game zone.
+16. `supabase/migrations/016_tournament_match_authorization.sql`: Restricts match result writes to tenant owners and validates score/winner consistency.
+17. `supabase/migrations/017_offline_session_ids.sql`: Uses client-generated session IDs so offline increments can queue against sessions before they reach the server.
+
+Apply migration 017 before deploying the client changes that send `p_session_id` to `start_session`.
 
 ---
 

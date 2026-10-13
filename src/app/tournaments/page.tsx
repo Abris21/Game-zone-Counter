@@ -1,4 +1,5 @@
 'use client'
+import ActionButton from '@/components/ActionButton'
 
 import React, { useCallback, useEffect, useState } from 'react'
 import { sb, msg, etb } from '@/lib/supabase'
@@ -6,6 +7,7 @@ import { useAuthGuard } from '@/lib/auth'
 import AppLayout from '@/components/AppLayout'
 import { getRoundTitle, calculateTournamentAccounting } from '@/lib/tournamentBrackets'
 import { TrophyIcon } from '@/components/PlayStationIcons'
+import { getLocalSnapshot, setLocalSnapshot } from '@/lib/offline'
 
 interface Tournament {
   id: string
@@ -58,6 +60,7 @@ export default function TournamentsPage() {
   const [matches, setMatches] = useState<Match[]>([])
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [hasLocalSnapshot, setHasLocalSnapshot] = useState(false)
 
   // Creation modal state
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -88,9 +91,37 @@ export default function TournamentsPage() {
   const [winnerId, setWinnerId] = useState<string | null>(null)
   const [isWalkover, setIsWalkover] = useState(false)
 
-  const isOwner = profile?.role === 'admin' || profile?.role === 'super_admin'
+  const isOwner = profile?.role === 'admin'
+
+  const hydrateLocalSnapshot = useCallback(() => {
+    const snapTournaments = getLocalSnapshot<Tournament[]>('tournaments_list')
+    const snapParticipants = getLocalSnapshot<Participant[]>('tournament_participants')
+    const snapMatches = getLocalSnapshot<Match[]>('tournament_matches')
+    const snapSelectedId = getLocalSnapshot<string>('selected_tournament_id')
+
+    let hasAny = false
+    if (snapTournaments.data) {
+      const list = snapTournaments.data
+      setTournaments(list)
+      hasAny = true
+      const selectedId = snapSelectedId.data ?? list[0]?.id ?? null
+      const nextSelected = list.find((t) => t.id === selectedId) ?? list[0] ?? null
+      setSelectedTourn(nextSelected)
+    }
+    if (snapParticipants.data) {
+      setParticipants(snapParticipants.data)
+      hasAny = true
+    }
+    if (snapMatches.data) {
+      setMatches(snapMatches.data)
+      hasAny = true
+    }
+    setHasLocalSnapshot(hasAny)
+    return hasAny
+  }, [])
 
   const loadTournaments = useCallback(async () => {
+    hydrateLocalSnapshot()
     const { data, error } = await sb
       .from('tournaments')
       .select('*')
@@ -103,12 +134,16 @@ export default function TournamentsPage() {
 
     const list = (data as Tournament[]) || []
     setTournaments(list)
-    if (list.length > 0 && !selectedTourn) {
-      setSelectedTourn(list[0])
-    }
-  }, [selectedTourn])
+    setSelectedTourn((current) => {
+      const next = list.find((t) => t.id === current?.id) ?? list[0] ?? null
+      if (next) setLocalSnapshot('selected_tournament_id', next.id)
+      return next
+    })
+    setLocalSnapshot('tournaments_list', list)
+  }, [hydrateLocalSnapshot])
 
   const loadTournamentDetails = useCallback(async (tournId: string) => {
+    hydrateLocalSnapshot()
     const [pRes, mRes] = await Promise.all([
       sb
         .from('tournament_participants')
@@ -128,17 +163,22 @@ export default function TournamentsPage() {
       return
     }
 
-    setParticipants((pRes.data as Participant[]) || [])
-    setMatches((mRes.data as Match[]) || [])
-  }, [])
+    const nextParticipants = (pRes.data as Participant[]) || []
+    const nextMatches = (mRes.data as Match[]) || []
+    setParticipants(nextParticipants)
+    setMatches(nextMatches)
+    setLocalSnapshot('tournament_participants', nextParticipants)
+    setLocalSnapshot('tournament_matches', nextMatches)
+  }, [hydrateLocalSnapshot])
 
   useEffect(() => {
-    loadTournaments()
-  }, [loadTournaments])
+    hydrateLocalSnapshot()
+    void loadTournaments()
+  }, [hydrateLocalSnapshot, loadTournaments])
 
   useEffect(() => {
     if (selectedTourn) {
-      loadTournamentDetails(selectedTourn.id)
+      void loadTournamentDetails(selectedTourn.id)
     }
   }, [selectedTourn, loadTournamentDetails])
 
@@ -240,13 +280,23 @@ export default function TournamentsPage() {
   const handleRecordResult = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!activeMatch || !winnerId) return
+    const firstScore = Number(score1)
+    const secondScore = Number(score2)
+    if (!Number.isInteger(firstScore) || !Number.isInteger(secondScore) || firstScore < 0 || secondScore < 0) {
+      setErr('Enter non-negative whole-number scores.')
+      return
+    }
+    if (!isWalkover && (firstScore === secondScore || winnerId !== (firstScore > secondScore ? activeMatch.player1_id : activeMatch.player2_id))) {
+      setErr('The selected winner must match the score. Tied matches require a walkover or a recorded tie-break result.')
+      return
+    }
 
     setBusy(true)
     setErr('')
     const { error } = await sb.rpc('record_match_result', {
       p_match: activeMatch.id,
-      p_score1: Number(score1),
-      p_score2: Number(score2),
+      p_score1: firstScore,
+      p_score2: secondScore,
       p_winner: winnerId,
       p_walkover: isWalkover,
     })
@@ -264,11 +314,11 @@ export default function TournamentsPage() {
   const paidCount = participants.filter((p) => p.payment_status === 'paid').length
   const financials = selectedTourn
     ? calculateTournamentAccounting(
-        selectedTourn.entry_fee,
-        paidCount,
-        selectedTourn.prize_pool,
-        selectedTourn.organizer_expenses
-      )
+      selectedTourn.entry_fee,
+      paidCount,
+      selectedTourn.prize_pool,
+      selectedTourn.organizer_expenses
+    )
     : { grossRevenue: 0, netProfit: 0, isProfitable: true }
 
   // Group matches by round for bracket
@@ -278,6 +328,18 @@ export default function TournamentsPage() {
   const getPlayerName = (id: string | null) => {
     if (!id) return 'TBD'
     return participants.find((p) => p.id === id)?.name || 'Unknown'
+  }
+
+  if (loading && !hasLocalSnapshot) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-bg px-4 text-ink">
+        <div className="surface-card w-full max-w-sm p-6 text-center shadow-2xl shadow-brand/10">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-3 border-brand border-t-transparent" />
+          <p className="font-display text-lg font-bold text-ink">Loading tournaments…</p>
+          <p className="mt-1 text-xs text-ink-muted">Pulling active brackets and player data.</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -292,13 +354,13 @@ export default function TournamentsPage() {
       }}
       action={
         isOwner && (
-          <button
+          <ActionButton
             onClick={() => setShowCreateModal(true)}
             className="btn btn-gold text-xs h-9 px-3 font-bold"
           >
             <span>+</span>
             <span>Create Tournament</span>
-          </button>
+          </ActionButton>
         )
       }
     >
@@ -313,28 +375,26 @@ export default function TournamentsPage() {
         {tournaments.length > 0 && (
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
             {tournaments.map((t) => (
-              <button
+              <ActionButton
                 key={t.id}
                 onClick={() => setSelectedTourn(t)}
-                className={`rounded-2xl border px-4 py-2 text-xs font-bold whitespace-nowrap transition-all ${
-                  selectedTourn?.id === t.id
-                    ? 'border-brand bg-brand/15 text-brand shadow-glow-sm'
-                    : 'border-line bg-surface text-ink-muted hover:text-ink'
-                }`}
+                className={`rounded-2xl border px-4 py-2 text-xs font-bold whitespace-nowrap transition-all ${selectedTourn?.id === t.id
+                  ? 'border-brand bg-brand/15 text-brand shadow-glow-sm'
+                  : 'border-line bg-surface text-ink-muted hover:text-ink'
+                  }`}
               >
                 <span>{t.name}</span>
                 <span
-                  className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full ${
-                    t.status === 'completed'
-                      ? 'bg-ok/20 text-ok'
-                      : t.status === 'in_progress'
+                  className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full ${t.status === 'completed'
+                    ? 'bg-ok/20 text-ok'
+                    : t.status === 'in_progress'
                       ? 'bg-brand/20 text-brand'
                       : 'bg-surface-elevated text-ink-dim'
-                  }`}
+                    }`}
                 >
                   {t.status.replace('_', ' ')}
                 </span>
-              </button>
+              </ActionButton>
             ))}
           </div>
         )}
@@ -360,34 +420,33 @@ export default function TournamentsPage() {
 
                 <div className="flex items-center gap-2">
                   <span
-                    className={`rounded-xl px-3 py-1 text-xs font-extrabold uppercase tracking-wider ${
-                      selectedTourn.status === 'completed'
-                        ? 'bg-ok/20 text-ok border border-ok/40'
-                        : selectedTourn.status === 'in_progress'
+                    className={`rounded-xl px-3 py-1 text-xs font-extrabold uppercase tracking-wider ${selectedTourn.status === 'completed'
+                      ? 'bg-ok/20 text-ok border border-ok/40'
+                      : selectedTourn.status === 'in_progress'
                         ? 'bg-brand/20 text-brand border border-brand/40 animate-pulse'
                         : 'bg-surface-elevated text-ink-muted border border-line'
-                    }`}
+                      }`}
                   >
                     {selectedTourn.status.replace('_', ' ')}
                   </span>
 
                   {selectedTourn.status === 'registration_open' && (
-                    <button
+                    <ActionButton
                       onClick={() => setShowRegisterModal(true)}
                       className="btn btn-gold text-xs h-9 px-3"
                     >
                       + Register Player
-                    </button>
+                    </ActionButton>
                   )}
 
                   {selectedTourn.status === 'registration_open' && isOwner && (
-                    <button
+                    <ActionButton
                       disabled={busy || participants.length < 2}
                       onClick={handleGenerateBracket}
                       className="btn btn-secondary text-xs h-9 px-3 font-bold hover:border-brand"
                     >
                       ⚡ Start Tournament
-                    </button>
+                    </ActionButton>
                   )}
                 </div>
               </div>
@@ -430,11 +489,10 @@ export default function TournamentsPage() {
                 </div>
 
                 <div
-                  className={`rounded-2xl border p-3 text-center ${
-                    financials.isProfitable
-                      ? 'border-ok/40 bg-ok/10 text-ok'
-                      : 'border-bad/40 bg-bad/10 text-bad'
-                  }`}
+                  className={`rounded-2xl border p-3 text-center ${financials.isProfitable
+                    ? 'border-ok/40 bg-ok/10 text-ok'
+                    : 'border-bad/40 bg-bad/10 text-bad'
+                    }`}
                 >
                   <p className="text-[10px] font-bold uppercase tracking-wider">
                     {financials.isProfitable ? 'Net Profit' : 'Net Loss'}
@@ -510,20 +568,18 @@ export default function TournamentsPage() {
                                       setWinnerId(m.winner_id || m.player1_id)
                                     }
                                   }}
-                                  className={`rounded-2xl border p-3 transition-all cursor-pointer ${
-                                    isCompleted
-                                      ? 'border-line/70 bg-surface-elevated/60'
-                                      : canScore
+                                  className={`rounded-2xl border p-3 transition-all cursor-pointer ${isCompleted
+                                    ? 'border-line/70 bg-surface-elevated/60'
+                                    : canScore
                                       ? 'border-brand/50 bg-surface hover:border-brand shadow-glow-sm'
                                       : 'border-line/40 bg-surface/40 opacity-70 cursor-not-allowed'
-                                  }`}
+                                    }`}
                                 >
                                   <div className="flex items-center justify-between text-[10px] text-ink-dim border-b border-line/40 pb-1 mb-2">
                                     <span>Match #{m.match_number}</span>
                                     <span
-                                      className={`font-semibold capitalize ${
-                                        isCompleted ? 'text-ok' : 'text-brand'
-                                      }`}
+                                      className={`font-semibold capitalize ${isCompleted ? 'text-ok' : 'text-brand'
+                                        }`}
                                     >
                                       {m.status}
                                     </span>
@@ -531,11 +587,10 @@ export default function TournamentsPage() {
 
                                   {/* Player 1 Row */}
                                   <div
-                                    className={`flex items-center justify-between py-1 px-1.5 rounded-lg text-xs font-semibold ${
-                                      m.winner_id === m.player1_id
-                                        ? 'bg-brand/20 text-brand font-bold'
-                                        : 'text-ink'
-                                    }`}
+                                    className={`flex items-center justify-between py-1 px-1.5 rounded-lg text-xs font-semibold ${m.winner_id === m.player1_id
+                                      ? 'bg-brand/20 text-brand font-bold'
+                                      : 'text-ink'
+                                      }`}
                                   >
                                     <span className="truncate max-w-[170px]">{p1Name}</span>
                                     <span className="font-display font-bold">
@@ -545,11 +600,10 @@ export default function TournamentsPage() {
 
                                   {/* Player 2 Row */}
                                   <div
-                                    className={`flex items-center justify-between py-1 px-1.5 rounded-lg text-xs font-semibold mt-1 ${
-                                      m.winner_id === m.player2_id
-                                        ? 'bg-brand/20 text-brand font-bold'
-                                        : 'text-ink'
-                                    }`}
+                                    className={`flex items-center justify-between py-1 px-1.5 rounded-lg text-xs font-semibold mt-1 ${m.winner_id === m.player2_id
+                                      ? 'bg-brand/20 text-brand font-bold'
+                                      : 'text-ink'
+                                      }`}
                                   >
                                     <span className="truncate max-w-[170px]">{p2Name}</span>
                                     <span className="font-display font-bold">
@@ -574,12 +628,12 @@ export default function TournamentsPage() {
                     Registered Players Roster ({participants.length} / {selectedTourn.max_players})
                   </h3>
                   {selectedTourn.status === 'registration_open' && (
-                    <button
+                    <ActionButton
                       onClick={() => setShowRegisterModal(true)}
                       className="btn btn-outline-gold text-xs h-8 px-2.5 font-bold"
                     >
                       + Add Player
-                    </button>
+                    </ActionButton>
                   )}
                 </div>
 
@@ -596,11 +650,10 @@ export default function TournamentsPage() {
                         {p.phone && <p className="text-[11px] text-ink-muted">{p.phone}</p>}
                       </div>
                       <span
-                        className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${
-                          p.payment_status === 'paid'
-                            ? 'bg-ok/20 text-ok border border-ok/40'
-                            : 'bg-warning/20 text-warning border border-warning/40'
-                        }`}
+                        className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${p.payment_status === 'paid'
+                          ? 'bg-ok/20 text-ok border border-ok/40'
+                          : 'bg-warning/20 text-warning border border-warning/40'
+                          }`}
                       >
                         {p.payment_status}
                       </span>
@@ -625,12 +678,12 @@ export default function TournamentsPage() {
               generate elimination brackets, and track prize accounting.
             </p>
             {isOwner && (
-              <button
+              <ActionButton
                 onClick={() => setShowCreateModal(true)}
                 className="btn btn-gold text-xs mt-2"
               >
                 Create Tournament
-              </button>
+              </ActionButton>
             )}
           </div>
         )}
@@ -646,12 +699,12 @@ export default function TournamentsPage() {
           <div className="w-full max-w-md rounded-3xl border border-line bg-surface p-5 shadow-2xl space-y-4 max-h-[90dvh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="font-display text-lg font-bold text-ink">Create New Tournament</h3>
-              <button
+              <ActionButton
                 onClick={() => setShowCreateModal(false)}
                 className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface-elevated text-sm text-ink-muted"
               >
                 ✕
-              </button>
+              </ActionButton>
             </div>
 
             <form onSubmit={handleCreateTournament} className="space-y-3">
@@ -767,9 +820,9 @@ export default function TournamentsPage() {
                 />
               </div>
 
-              <button disabled={busy} className="btn btn-gold w-full mt-2">
+              <ActionButton disabled={busy} className="btn btn-gold w-full mt-2">
                 {busy ? 'Creating…' : 'Publish Tournament'}
-              </button>
+              </ActionButton>
             </form>
           </div>
         </div>
@@ -785,12 +838,12 @@ export default function TournamentsPage() {
           <div className="w-full max-w-sm rounded-3xl border border-line bg-surface p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="font-display text-lg font-bold text-ink">Register Participant</h3>
-              <button
+              <ActionButton
                 onClick={() => setShowRegisterModal(false)}
                 className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface-elevated text-sm text-ink-muted"
               >
                 ✕
-              </button>
+              </ActionButton>
             </div>
 
             <form onSubmit={handleRegisterPlayer} className="space-y-3">
@@ -839,26 +892,25 @@ export default function TournamentsPage() {
                   </label>
                   <div className="grid grid-cols-3 gap-2">
                     {(['cash', 'telebirr', 'cbe'] as const).map((method) => (
-                      <button
+                      <ActionButton
                         type="button"
                         key={method}
                         onClick={() => setNewPlayer({ ...newPlayer, method })}
-                        className={`btn text-xs uppercase font-bold py-2 ${
-                          newPlayer.method === method
-                            ? 'btn-gold'
-                            : 'btn-secondary text-ink-muted'
-                        }`}
+                        className={`btn text-xs uppercase font-bold py-2 ${newPlayer.method === method
+                          ? 'btn-gold'
+                          : 'btn-secondary text-ink-muted'
+                          }`}
                       >
                         {method === 'cbe' ? 'CBE' : method}
-                      </button>
+                      </ActionButton>
                     ))}
                   </div>
                 </div>
               )}
 
-              <button disabled={busy} className="btn btn-gold w-full mt-2">
+              <ActionButton disabled={busy} className="btn btn-gold w-full mt-2">
                 {busy ? 'Registering…' : 'Confirm Registration'}
-              </button>
+              </ActionButton>
             </form>
           </div>
         </div>
@@ -876,12 +928,12 @@ export default function TournamentsPage() {
               <h3 className="font-display text-lg font-bold text-ink">
                 Match #{activeMatch.match_number} Scorecard
               </h3>
-              <button
+              <ActionButton
                 onClick={() => setActiveMatch(null)}
                 className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface-elevated text-sm text-ink-muted"
               >
                 ✕
-              </button>
+              </ActionButton>
             </div>
 
             <form onSubmit={handleRecordResult} className="space-y-4">
@@ -897,15 +949,14 @@ export default function TournamentsPage() {
                     onChange={(e) => setScore1(e.target.value)}
                     className="inp text-center text-2xl font-black"
                   />
-                  <button
+                  <ActionButton
                     type="button"
                     onClick={() => setWinnerId(activeMatch.player1_id)}
-                    className={`btn w-full text-xs py-1.5 ${
-                      winnerId === activeMatch.player1_id ? 'btn-gold' : 'btn-secondary'
-                    }`}
+                    className={`btn w-full text-xs py-1.5 ${winnerId === activeMatch.player1_id ? 'btn-gold' : 'btn-secondary'
+                      }`}
                   >
                     Winner
-                  </button>
+                  </ActionButton>
                 </div>
 
                 <div className="surface-card p-3 space-y-2">
@@ -919,15 +970,14 @@ export default function TournamentsPage() {
                     onChange={(e) => setScore2(e.target.value)}
                     className="inp text-center text-2xl font-black"
                   />
-                  <button
+                  <ActionButton
                     type="button"
                     onClick={() => setWinnerId(activeMatch.player2_id)}
-                    className={`btn w-full text-xs py-1.5 ${
-                      winnerId === activeMatch.player2_id ? 'btn-gold' : 'btn-secondary'
-                    }`}
+                    className={`btn w-full text-xs py-1.5 ${winnerId === activeMatch.player2_id ? 'btn-gold' : 'btn-secondary'
+                      }`}
                   >
                     Winner
-                  </button>
+                  </ActionButton>
                 </div>
               </div>
 
@@ -944,9 +994,9 @@ export default function TournamentsPage() {
                 </label>
               </div>
 
-              <button disabled={busy || !winnerId} className="btn btn-gold w-full">
+              <ActionButton disabled={busy || !winnerId} className="btn btn-gold w-full">
                 {busy ? 'Saving Result…' : 'Record Score & Advance Winner'}
-              </button>
+              </ActionButton>
             </form>
           </div>
         </div>

@@ -1,10 +1,12 @@
 'use client'
+import ActionButton from '@/components/ActionButton'
 
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { sb, msg } from '@/lib/supabase'
 import { useAuthGuard } from '@/lib/auth'
 import AppLayout from '@/components/AppLayout'
+import { getLocalSnapshot, setLocalSnapshot } from '@/lib/offline'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -23,27 +25,60 @@ export default function SettingsPage() {
   const [okMsg, setOkMsg] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [hasLocalSnapshot, setHasLocalSnapshot] = useState(false)
+
+  const hydrateLocalSnapshot = useCallback(() => {
+    const snapSettings = getLocalSnapshot<{ name: string; location: string; currency: string; timezone: string; reopen_window_minutes?: number; fifa_extra_time_rule?: string; fifa_extra_time_flat_fee?: number; fifa_penalties_rule?: string; fifa_penalties_flat_fee?: number }>('settings_zone')
+    if (snapSettings.data) {
+      setName(snapSettings.data.name || '')
+      setLocation(snapSettings.data.location || '')
+      setCurrency(snapSettings.data.currency || 'ETB')
+      setTimezone(snapSettings.data.timezone || 'Africa/Addis_Ababa')
+      setReopenWindow(String(snapSettings.data.reopen_window_minutes || 5))
+      setFifaExtraRule((snapSettings.data.fifa_extra_time_rule as 'free' | 'half_price' | 'full_price' | 'flat_fee') || 'free')
+      setFifaExtraFee(String(snapSettings.data.fifa_extra_time_flat_fee || 0))
+      setFifaPenaltyRule((snapSettings.data.fifa_penalties_rule as 'free' | 'half_price' | 'full_price' | 'flat_fee') || 'free')
+      setFifaPenaltyFee(String(snapSettings.data.fifa_penalties_flat_fee || 0))
+      setHasLocalSnapshot(true)
+      return true
+    }
+    setHasLocalSnapshot(false)
+    return false
+  }, [])
 
   useEffect(() => {
-    ;(async () => {
-      const res = await sb
-        .from('game_zones')
-        .select('*')
-        .maybeSingle()
+    hydrateLocalSnapshot()
+      ; (async () => {
+        const res = await sb
+          .from('game_zones')
+          .select('*')
+          .maybeSingle()
 
-      if (res.data) {
-        setName(res.data.name || '')
-        setLocation(res.data.location || '')
-        setCurrency(res.data.currency || 'ETB')
-        setTimezone(res.data.timezone || 'Africa/Addis_Ababa')
-        setReopenWindow(String(res.data.reopen_window_minutes || 5))
-        setFifaExtraRule(res.data.fifa_extra_time_rule || 'free')
-        setFifaExtraFee(String(res.data.fifa_extra_time_flat_fee || 0))
-        setFifaPenaltyRule(res.data.fifa_penalties_rule || 'free')
-        setFifaPenaltyFee(String(res.data.fifa_penalties_flat_fee || 0))
-      }
-    })()
-  }, [])
+        if (res.data) {
+          const nextSettings = {
+            name: res.data.name || '',
+            location: res.data.location || '',
+            currency: res.data.currency || 'ETB',
+            timezone: res.data.timezone || 'Africa/Addis_Ababa',
+            reopen_window_minutes: res.data.reopen_window_minutes || 5,
+            fifa_extra_time_rule: res.data.fifa_extra_time_rule || 'free',
+            fifa_extra_time_flat_fee: res.data.fifa_extra_time_flat_fee || 0,
+            fifa_penalties_rule: res.data.fifa_penalties_rule || 'free',
+            fifa_penalties_flat_fee: res.data.fifa_penalties_flat_fee || 0,
+          }
+          setName(nextSettings.name)
+          setLocation(nextSettings.location)
+          setCurrency(nextSettings.currency)
+          setTimezone(nextSettings.timezone)
+          setReopenWindow(String(nextSettings.reopen_window_minutes))
+          setFifaExtraRule((nextSettings.fifa_extra_time_rule as 'free' | 'half_price' | 'full_price' | 'flat_fee') || 'free')
+          setFifaExtraFee(String(nextSettings.fifa_extra_time_flat_fee))
+          setFifaPenaltyRule((nextSettings.fifa_penalties_rule as 'free' | 'half_price' | 'full_price' | 'flat_fee') || 'free')
+          setFifaPenaltyFee(String(nextSettings.fifa_penalties_flat_fee))
+          setLocalSnapshot('settings_zone', nextSettings)
+        }
+      })()
+  }, [hydrateLocalSnapshot])
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -71,10 +106,14 @@ export default function SettingsPage() {
     }
   }
 
-  if (loading) {
+  if (loading && !hasLocalSnapshot) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-bg text-ink">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+      <div className="flex min-h-dvh items-center justify-center bg-bg px-4 text-ink">
+        <div className="surface-card w-full max-w-sm p-6 text-center shadow-2xl shadow-brand/10">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-3 border-brand border-t-transparent" />
+          <p className="font-display text-lg font-bold text-ink">Loading settings…</p>
+          <p className="mt-1 text-xs text-ink-muted">Loading zone rules and billing configuration.</p>
+        </div>
       </div>
     )
   }
@@ -255,9 +294,9 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <button disabled={busy} className="btn btn-gold w-full">
+          <ActionButton disabled={busy} className="btn btn-gold w-full">
             {busy ? 'Saving Settings…' : 'Save Business Settings'}
-          </button>
+          </ActionButton>
         </form>
       </div>
     </AppLayout>

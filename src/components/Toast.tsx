@@ -1,4 +1,5 @@
 'use client'
+import ActionButton from '@/components/ActionButton'
 
 import React, { createContext, useContext, useState, useCallback } from 'react'
 
@@ -79,13 +80,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               {t.title && <p className="font-bold text-ink">{t.title}</p>}
               <p className="text-ink/80">{t.message}</p>
             </div>
-            <button
+            <ActionButton
               onClick={() => removeToast(t.id)}
               className="text-xs text-ink/40 hover:text-ink transition-colors"
               aria-label="Close notification"
             >
               ✕
-            </button>
+            </ActionButton>
           </div>
         ))}
       </div>

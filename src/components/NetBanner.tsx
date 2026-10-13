@@ -1,9 +1,18 @@
 'use client'
+import ActionButton from '@/components/ActionButton'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { flushQueue, getQueue, clearFailedQueue, QueuedAction } from '@/lib/offline'
 
-export default function NetBanner({ onSynced }: { onSynced: () => void }) {
+export default function NetBanner({
+  onSynced,
+  userId,
+  zoneId,
+}: {
+  onSynced: () => void
+  userId?: string
+  zoneId?: string | null
+}) {
   const [online, setOnline] = useState(true)
   const [pendingCount, setPendingCount] = useState(0)
   const [failedCount, setFailedCount] = useState(0)
@@ -11,14 +20,26 @@ export default function NetBanner({ onSynced }: { onSynced: () => void }) {
   const [failedItems, setFailedItems] = useState<QueuedAction[]>([])
   const [showFailedDetails, setShowFailedDetails] = useState(false)
   const [lastSynced, setLastSynced] = useState<string | null>(null)
+  const autoRetriedUnitBusy = useRef(new Set<string>())
 
   const checkSync = useCallback(async () => {
+    if (!userId || !zoneId) {
+      setPendingCount(0)
+      setFailedCount(0)
+      setFailedItems([])
+      return
+    }
     const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
     setOnline(isOnline)
 
-    const queue = await getQueue()
+    const queue = await getQueue(userId, zoneId)
     const pending = queue.filter((x) => x.status === 'pending' || x.status === 'syncing')
     const failed = queue.filter((x) => x.status === 'failed' || x.status === 'conflict')
+    const retryableBusyStart = failed.find((item) =>
+      item.fn === 'start_session' &&
+      /UNIT_BUSY/.test(item.lastError || '') &&
+      !autoRetriedUnitBusy.current.has(item.id)
+    )
 
     setPendingCount(pending.length)
     setFailedCount(failed.length)
@@ -28,17 +49,18 @@ export default function NetBanner({ onSynced }: { onSynced: () => void }) {
       setLastSynced(localStorage.getItem('gz_last_synced'))
     }
 
-    if (isOnline && pending.length > 0 && !syncing) {
+    if (isOnline && (pending.length > 0 || retryableBusyStart) && !syncing) {
+      if (retryableBusyStart) autoRetriedUnitBusy.current.add(retryableBusyStart.id)
       setSyncing(true)
-      const res = await flushQueue()
+      const res = await flushQueue(userId, zoneId, retryableBusyStart ? 'unit_busy' : false)
       setSyncing(false)
-      if (res.syncedCount > 0) {
-        onSynced()
-      }
+      onSynced()
       setPendingCount(res.pendingCount)
       setFailedCount(res.failedCount)
+      const updatedQueue = await getQueue(userId, zoneId)
+      setFailedItems(updatedQueue.filter((item) => item.status === 'failed' || item.status === 'conflict'))
     }
-  }, [onSynced, syncing])
+  }, [onSynced, syncing, userId, zoneId])
 
   useEffect(() => {
     checkSync()
@@ -54,21 +76,24 @@ export default function NetBanner({ onSynced }: { onSynced: () => void }) {
   }, [checkSync])
 
   const handleManualRetry = async () => {
+    if (!userId || !zoneId) return
     setSyncing(true)
-    const res = await flushQueue()
+    const res = await flushQueue(userId, zoneId, true)
     setSyncing(false)
-    if (res.syncedCount > 0) {
-      onSynced()
-    }
+    onSynced()
     setPendingCount(res.pendingCount)
     setFailedCount(res.failedCount)
+    const updatedQueue = await getQueue(userId, zoneId)
+    setFailedItems(updatedQueue.filter((item) => item.status === 'failed' || item.status === 'conflict'))
   }
 
   const handleClearFailed = async () => {
-    await clearFailedQueue()
+    if (!userId || !zoneId) return
+    await clearFailedQueue(userId, zoneId)
     setFailedCount(0)
     setFailedItems([])
     setShowFailedDetails(false)
+    onSynced()
   }
 
   if (online && pendingCount === 0 && failedCount === 0) {
@@ -80,13 +105,12 @@ export default function NetBanner({ onSynced }: { onSynced: () => void }) {
       {/* Main Connection & Sync Bar */}
       <div
         role="status"
-        className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-3.5 text-xs sm:text-sm font-medium shadow-md backdrop-blur-md transition-all ${
-          !online
-            ? 'border-warning/50 bg-warning/10 text-warning'
-            : failedCount > 0
+        className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-3.5 text-xs sm:text-sm font-medium shadow-md backdrop-blur-md transition-all ${!online
+          ? 'border-warning/50 bg-warning/10 text-warning'
+          : failedCount > 0
             ? 'border-bad/50 bg-bad/10 text-bad'
             : 'border-brand/40 bg-surface/90 text-brand'
-        }`}
+          }`}
       >
         <div className="flex items-center gap-2.5">
           {!online ? (
@@ -127,29 +151,29 @@ export default function NetBanner({ onSynced }: { onSynced: () => void }) {
         <div className="flex items-center gap-2">
           {failedCount > 0 && (
             <>
-              <button
+              <ActionButton
                 onClick={() => setShowFailedDetails(!showFailedDetails)}
                 className="underline hover:text-ink transition-colors font-semibold"
               >
                 {showFailedDetails ? 'Hide details' : 'Review'}
-              </button>
-              <button
+              </ActionButton>
+              <ActionButton
                 onClick={handleClearFailed}
                 className="rounded-lg border border-bad/40 px-2 py-1 text-xs hover:bg-bad/20 transition-colors"
               >
                 Dismiss
-              </button>
+              </ActionButton>
             </>
           )}
 
           {online && (pendingCount > 0 || failedCount > 0) && (
-            <button
+            <ActionButton
               onClick={handleManualRetry}
               disabled={syncing}
               className="rounded-lg bg-brand px-2.5 py-1 text-xs font-bold text-bg hover:bg-brand-hover transition-colors disabled:opacity-50"
             >
               {syncing ? 'Syncing…' : 'Retry now'}
-            </button>
+            </ActionButton>
           )}
         </div>
       </div>

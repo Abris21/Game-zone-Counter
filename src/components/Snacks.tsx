@@ -1,4 +1,5 @@
 'use client'
+import ActionButton from '@/components/ActionButton'
 
 import { useEffect, useState } from 'react'
 import { sb, msg, etb } from '@/lib/supabase'
@@ -27,10 +28,12 @@ export default function Snacks({
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    sb.rpc('menu').then(({ data, error }) => {
+    Promise.resolve(sb.rpc('menu')).then(({ data, error }) => {
       if (error) setErr(msg(error))
       else setMenu((data as MenuItem[]) || [])
-    })
+    }).catch((error: unknown) =>
+      setErr(msg({ message: error instanceof Error ? error.message : String(error) }))
+    )
   }, [])
 
   const total = menu.reduce((acc, item) => acc + (quantities[item.id] || 0) * item.sell_price, 0)
@@ -47,25 +50,30 @@ export default function Snacks({
       return
     }
 
-    const { error } = await executeOrQueue(
-      'add_sale_idempotent',
-      {
-        p_items: items,
-        p_session: session,
-        p_method: method,
-      },
-      {
-        targetId: session || undefined,
-        description: `Snack Sale: ${items.length} items (${total} ETB)`,
-      }
-    )
+    try {
+      const { error } = await executeOrQueue(
+        'add_sale_idempotent',
+        {
+          p_items: items,
+          p_session: session,
+          p_method: method,
+        },
+        {
+          targetId: session || undefined,
+          description: `Snack Sale: ${items.length} items (${total} ETB)`,
+        }
+      )
 
-    setBusy(false)
-    if (error) {
-      setErr(msg(error))
-      return
+      if (error) {
+        setErr(msg(error))
+        return
+      }
+      onClose()
+    } catch (error) {
+      setErr(msg({ message: error instanceof Error ? error.message : String(error) }))
+    } finally {
+      setBusy(false)
     }
-    onClose()
   }
 
   return (
@@ -85,12 +93,12 @@ export default function Snacks({
               {session ? 'Billed together at session checkout' : 'Instant walk-in counter sale'}
             </p>
           </div>
-          <button
+          <ActionButton
             onClick={onClose}
             className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface-elevated text-sm text-ink-muted hover:text-ink"
           >
             ✕
-          </button>
+          </ActionButton>
         </div>
 
         {/* Error Alert */}
@@ -129,7 +137,7 @@ export default function Snacks({
 
                 {/* Counter controls */}
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <button
+                  <ActionButton
                     disabled={qty === 0 || busy}
                     onClick={() =>
                       setQuantities({ ...quantities, [item.id]: Math.max(0, qty - 1) })
@@ -137,9 +145,9 @@ export default function Snacks({
                     className="flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-surface text-base font-bold text-ink hover:border-brand/40 active:scale-95 disabled:opacity-30"
                   >
                     −
-                  </button>
+                  </ActionButton>
                   <span className="w-7 text-center font-bold text-sm text-ink">{qty}</span>
-                  <button
+                  <ActionButton
                     disabled={isOutOfStock || qty >= (item.track_stock ? item.stock_qty : 50) || busy}
                     onClick={() =>
                       setQuantities({
@@ -150,7 +158,7 @@ export default function Snacks({
                     className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand text-base font-bold text-bg hover:bg-brand-hover active:scale-95 disabled:opacity-30"
                   >
                     +
-                  </button>
+                  </ActionButton>
                 </div>
               </div>
             )
@@ -171,34 +179,34 @@ export default function Snacks({
           </div>
 
           {session ? (
-            <button
+            <ActionButton
               disabled={total === 0 || busy}
               onClick={() => handleSubmit(null)}
               className="btn btn-gold w-full"
             >
               {busy ? 'Adding…' : t('Add to session')}
-            </button>
+            </ActionButton>
           ) : (
             <div className="space-y-2">
               <p className="text-xs text-ink/60">{t('How did they pay?')}</p>
               <div className="grid grid-cols-3 gap-2">
                 {(['cash', 'telebirr', 'cbe'] as const).map((method) => (
-                  <button
+                  <ActionButton
                     key={method}
                     disabled={total === 0 || busy}
                     onClick={() => handleSubmit(method)}
                     className="btn btn-secondary text-xs uppercase tracking-wider font-bold hover:border-brand disabled:opacity-40"
                   >
                     {method === 'cbe' ? 'CBE' : t(method)}
-                  </button>
+                  </ActionButton>
                 ))}
               </div>
             </div>
           )}
 
-          <button onClick={onClose} className="btn btn-secondary w-full text-xs">
+          <ActionButton onClick={onClose} className="btn btn-secondary w-full text-xs">
             {t('Cancel')}
-          </button>
+          </ActionButton>
         </div>
       </div>
     </div>

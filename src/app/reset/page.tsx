@@ -1,4 +1,5 @@
 'use client'
+import ActionButton from '@/components/ActionButton'
 
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -122,9 +123,9 @@ export default function ResetPasswordPage() {
                 />
               </div>
 
-              <button disabled={busy} className="btn btn-gold w-full">
+              <ActionButton disabled={busy} className="btn btn-gold w-full">
                 {busy ? 'Updating…' : 'Update Password'}
-              </button>
+              </ActionButton>
             </form>
           )}
         </div>

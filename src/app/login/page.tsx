@@ -1,8 +1,10 @@
 'use client'
+import ActionButton from '@/components/ActionButton'
+import Image from 'next/image'
 
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { sb, msg } from '@/lib/supabase'
+import { sb, msg, SUPABASE_STATUS_MESSAGE, isSupabaseConfigured } from '@/lib/supabase'
 import { useT, useI18n } from '@/lib/i18n'
 import { ROLE_HOMES, UserRole } from '@/lib/auth'
 import { PlayStationSymbolsRow } from '@/components/PlayStationIcons'
@@ -19,7 +21,9 @@ export default function LoginPage() {
   const [zoneName, setZoneName] = useState('')
   const [fullName, setFullName] = useState('')
   const [err, setErr] = useState('')
+  const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
+  const supabaseReady = isSupabaseConfigured()
 
   // Auto redirect if already signed in
   useEffect(() => {
@@ -46,6 +50,7 @@ export default function LoginPage() {
     e.preventDefault()
     setBusy(true)
     setErr('')
+    setNotice('')
 
     const identifier = usernameOrEmail.trim()
     const email = identifier.includes('@') ? identifier : `${identifier.toLowerCase()}@gz.local`
@@ -132,20 +137,10 @@ export default function LoginPage() {
         return
       }
 
-      // Auto sign in with created credentials
-      const { data: authData, error: authErr } = await sb.auth.signInWithPassword({
-        email: usernameOrEmail.trim().toLowerCase(),
-        password,
-      })
-
-      if (authErr || !authData.user) {
-        setIsRegisterMode(false)
-        setErr('Registration succeeded! Please sign in.')
-        setBusy(false)
-        return
-      }
-
-      router.replace('/monitor')
+      setIsRegisterMode(false)
+      setPassword('')
+      setNotice('Registration received. A platform super-admin must approve your game zone before you can sign in.')
+      setBusy(false)
     } catch {
       setErr('Network error during registration.')
       setBusy(false)
@@ -161,11 +156,11 @@ export default function LoginPage() {
       <div className="w-full max-w-sm space-y-6 relative z-10">
         {/* Brand header */}
         <div className="text-center space-y-2">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand via-amber-400 to-yellow-600 text-bg shadow-glow font-black text-2xl">
-            B
+          <div className="relative mx-auto h-24 w-24 overflow-hidden rounded-2xl border border-line bg-[#080B11] shadow-glow">
+            <Image src="/logo.png" alt="Gamezone Counter logo" fill sizes="96px" className="object-cover" priority />
           </div>
           <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink">
-            {t('Game Zone')}
+            Gamezone Counter
           </h1>
           <p className="text-xs text-ink-muted">
             {isRegisterMode ? 'Register new game zone owner account' : t('Sign in to start counting')}
@@ -180,6 +175,17 @@ export default function LoginPage() {
           {err && (
             <div role="alert" className="rounded-xl border border-bad/40 bg-bad/10 p-3 text-xs text-bad">
               {err}
+            </div>
+          )}
+          {notice && (
+            <div role="status" className="rounded-xl border border-ok/40 bg-ok/10 p-3 text-xs text-ok">
+              {notice}
+            </div>
+          )}
+
+          {!supabaseReady && (
+            <div role="alert" className="rounded-xl border border-warning/50 bg-warning/10 p-3 text-xs text-warning">
+              {SUPABASE_STATUS_MESSAGE}
             </div>
           )}
 
@@ -243,15 +249,15 @@ export default function LoginPage() {
               />
             </div>
 
-            <button disabled={busy} className="btn btn-gold w-full mt-2">
+            <ActionButton disabled={busy || !supabaseReady} className="btn btn-gold w-full mt-2">
               {busy
                 ? isRegisterMode
                   ? 'Registering…'
                   : t('Signing in…')
                 : isRegisterMode
-                ? 'Create Game Zone'
-                : t('Sign in')}
-            </button>
+                  ? 'Create Game Zone'
+                  : t('Sign in')}
+            </ActionButton>
           </form>
 
           {/* Helper links */}
@@ -262,7 +268,7 @@ export default function LoginPage() {
               </a>
             )}
 
-            <button
+            <ActionButton
               type="button"
               onClick={() => {
                 setIsRegisterMode(!isRegisterMode)
@@ -273,7 +279,7 @@ export default function LoginPage() {
               {isRegisterMode
                 ? 'Already have an account? Sign in'
                 : 'New Game Zone? Register as Owner'}
-            </button>
+            </ActionButton>
           </div>
         </div>
 

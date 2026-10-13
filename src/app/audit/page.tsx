@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { sb, msg } from '@/lib/supabase'
 import { useAuthGuard } from '@/lib/auth'
 import AppLayout from '@/components/AppLayout'
+import { getLocalSnapshot, setLocalSnapshot } from '@/lib/offline'
 
 interface AuditLogItem {
   id: string
@@ -26,8 +27,20 @@ export default function AuditPage() {
   const [filterAction, setFilterAction] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [hasLocalSnapshot, setHasLocalSnapshot] = useState(false)
+
+  const hydrateLocalSnapshot = useCallback(() => {
+    const snapLogs = getLocalSnapshot<AuditLogItem[]>('audit_logs')
+    const snapUserNames = getLocalSnapshot<Record<string, string>>('audit_user_names')
+    let hasAny = false
+    if (snapLogs.data) { setLogs(snapLogs.data); hasAny = true }
+    if (snapUserNames.data) { setUserNames(snapUserNames.data); hasAny = true }
+    setHasLocalSnapshot(hasAny)
+    return hasAny
+  }, [])
 
   const loadAuditLogs = useCallback(async () => {
+    hydrateLocalSnapshot()
     setBusy(true)
     const [logRes, profRes] = await Promise.all([
       sb
@@ -44,26 +57,33 @@ export default function AuditPage() {
       return
     }
 
-    setLogs((logRes.data as AuditLogItem[]) || [])
-    setUserNames(
-      Object.fromEntries(
-        ((profRes.data || []) as { id: string; full_name: string }[]).map((p) => [p.id, p.full_name])
-      )
+    const nextLogs = (logRes.data as AuditLogItem[]) || []
+    const nextUserNames = Object.fromEntries(
+      ((profRes.data || []) as { id: string; full_name: string }[]).map((p) => [p.id, p.full_name])
     )
-  }, [])
+    setLogs(nextLogs)
+    setUserNames(nextUserNames)
+    setLocalSnapshot('audit_logs', nextLogs)
+    setLocalSnapshot('audit_user_names', nextUserNames)
+  }, [hydrateLocalSnapshot])
 
   useEffect(() => {
-    loadAuditLogs()
-  }, [loadAuditLogs])
+    hydrateLocalSnapshot()
+    void loadAuditLogs()
+  }, [loadAuditLogs, hydrateLocalSnapshot])
 
   const filteredLogs = logs.filter((l) =>
     filterAction ? l.action.toLowerCase().includes(filterAction.toLowerCase()) : true
   )
 
-  if (loading) {
+  if (loading && !hasLocalSnapshot) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-bg text-ink">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+      <div className="flex min-h-dvh items-center justify-center bg-bg px-4 text-ink">
+        <div className="surface-card w-full max-w-sm p-6 text-center shadow-2xl shadow-brand/10">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-3 border-brand border-t-transparent" />
+          <p className="font-display text-lg font-bold text-ink">Loading admin audit…</p>
+          <p className="mt-1 text-xs text-ink-muted">Syncing recent activity and zone records.</p>
+        </div>
       </div>
     )
   }

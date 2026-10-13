@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
+import ActionButton from '@/components/ActionButton'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { sb, msg, etb } from '@/lib/supabase'
 import { useAuthGuard } from '@/lib/auth'
-import { executeOrQueue, getLocalSnapshot, setLocalSnapshot } from '@/lib/offline'
+import { executeOrQueue, getLocalSnapshot, getQueue, setLocalSnapshot } from '@/lib/offline'
 import { useT } from '@/lib/i18n'
 import AppLayout from '@/components/AppLayout'
 import Snacks from '@/components/Snacks'
@@ -42,51 +43,143 @@ export default function CounterPage() {
   const [stations, setStations] = useState<Station[]>([])
   const [sessions, setSessions] = useState<Session[]>([])
   const [snackTotals, setSnackTotals] = useState<Record<string, number>>({})
+  const [todaySnackRevenue, setTodaySnackRevenue] = useState(0)
   const [activeSnackSession, setActiveSnackSession] = useState<string | null | false>(false)
   const [activeHandoverSession, setActiveHandoverSession] = useState<string | null>(null)
   const [activeEndSession, setActiveEndSession] = useState<Session | null>(null)
   const [activeFifaSession, setActiveFifaSession] = useState<Session | null>(null)
+  const [hasLocalSnapshot, setHasLocalSnapshot] = useState(false)
   const [err, setErr] = useState('')
+  const sessionCounts = useRef<Record<string, number>>({})
+  const pendingAdjustments = useRef<Record<string, number>>({})
+  const adjustQueues = useRef<Record<string, Promise<void>>>({})
+  const loadVersion = useRef(0)
+  const closedSessionIds = useRef<Set<string>>(new Set())
+
+  const hydrateLocalSnapshot = useCallback(() => {
+    const snapSt = getLocalSnapshot<Station[]>('stations')
+    const snapSe = getLocalSnapshot<Session[]>('sessions')
+    const snapSn = getLocalSnapshot<Record<string, number>>('snackTotals')
+    const snapRevenue = getLocalSnapshot<number>('todaySnackRevenue')
+
+    let hasAny = false
+    if (snapSt.data) {
+      setStations(snapSt.data)
+      hasAny = true
+    }
+    if (snapSe.data) {
+      const cachedSessions = snapSe.data.map((session) => {
+        const games_count = sessionCounts.current[session.id] ?? session.games_count
+        sessionCounts.current[session.id] = games_count
+        return { ...session, games_count }
+      })
+      setSessions(cachedSessions)
+      hasAny = true
+    }
+    if (snapSn.data) {
+      setSnackTotals(snapSn.data)
+      hasAny = true
+    }
+    if (snapRevenue.data != null) {
+      setTodaySnackRevenue(snapRevenue.data)
+      hasAny = true
+    }
+    setHasLocalSnapshot(hasAny)
+    return hasAny
+  }, [])
 
   const loadData = useCallback(async () => {
+    const version = ++loadVersion.current
+    const localHasData = hydrateLocalSnapshot()
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      const snapSt = getLocalSnapshot<Station[]>('stations')
-      const snapSe = getLocalSnapshot<Session[]>('sessions')
-      const snapSn = getLocalSnapshot<Record<string, number>>('snackTotals')
-      if (snapSt.data) setStations(snapSt.data)
-      if (snapSe.data) setSessions(snapSe.data)
-      if (snapSn.data) setSnackTotals(snapSn.data)
       return
     }
 
     const today = new Date()
     today.setHours(0, 0, 0, 0)
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
 
-    const [stRes, seRes] = await Promise.all([
+    const [stRes, seRes, queuedActions] = await Promise.all([
       sb.from('stations').select('id, name, kind, price').eq('is_archived', false).order('sort_order'),
-      sb.from('sessions').select('*').or(`status.eq.open,started_at.gte.${today.toISOString()}`),
+      sb.from('sessions').select('*').or(`status.eq.open,and(started_at.gte.${today.toISOString()},started_at.lt.${tomorrow.toISOString()}),and(ended_at.gte.${today.toISOString()},ended_at.lt.${tomorrow.toISOString()})`),
+      user?.id && profile?.zone_id ? getQueue(user.id, profile.zone_id) : Promise.resolve([]),
     ])
 
     if (stRes.error || seRes.error) {
+      if (version !== loadVersion.current) return
       setErr(msg(stRes.error || seRes.error))
       return
     }
 
+    if (version !== loadVersion.current) return
+
     const stData = (stRes.data as Station[]) || []
-    const seData = (seRes.data as Session[]) || []
+    const queuedGameDeltas = new Map<string, number>()
+    for (const action of queuedActions) {
+      if (
+        action.fn === 'adjust_session' &&
+        (action.status === 'pending' || action.status === 'syncing')
+      ) {
+        const sessionId = String(action.args.p_session || '')
+        const delta = Number(action.args.p_delta)
+        if (sessionId && Number.isInteger(delta)) {
+          queuedGameDeltas.set(sessionId, (queuedGameDeltas.get(sessionId) || 0) + delta)
+        }
+      }
+    }
+
+    const seData = ((seRes.data as Session[]) || []).map((session) => {
+      const games_count = session.games_count +
+        (pendingAdjustments.current[session.id] || 0) +
+        (queuedGameDeltas.get(session.id) || 0)
+      sessionCounts.current[session.id] = games_count
+      if (session.status === 'open') closedSessionIds.current.delete(session.id)
+      else closedSessionIds.current.add(session.id)
+      return { ...session, games_count }
+    })
+
+    const queuedStartIds = new Set(
+      queuedActions
+        .filter((action) => action.fn === 'start_session' && (action.status === 'pending' || action.status === 'syncing'))
+        .map((action) => String(action.args.p_session_id || ''))
+        .filter(Boolean)
+    )
+    const serverSessionIds = new Set(seData.map((session) => session.id))
+    const cachedSessions = getLocalSnapshot<Session[]>('sessions').data || []
+    const queuedSessions = cachedSessions.filter((session) =>
+      queuedStartIds.has(session.id) && !serverSessionIds.has(session.id) && session.status === 'open'
+    )
+    for (const session of queuedSessions) sessionCounts.current[session.id] = session.games_count
+    const visibleSessions = [...seData, ...queuedSessions]
 
     setStations(stData)
-    setSessions(seData)
+    setSessions(visibleSessions)
     setLocalSnapshot('stations', stData)
-    setLocalSnapshot('sessions', seData)
+    setLocalSnapshot('sessions', visibleSessions)
 
-    // Load active unpaid snack sales linked to open sessions
-    const snackRes = await sb
-      .from('sales')
-      .select('session_id, total')
-      .not('session_id', 'is', null)
-      .is('payment_method', null)
-      .is('voided_at', null)
+    // Load unpaid sales for active sessions and paid sales for today's total.
+    const [snackRes, paidTodayRes] = await Promise.all([
+      sb
+        .from('sales')
+        .select('session_id, total')
+        .not('session_id', 'is', null)
+        .is('payment_method', null)
+        .is('voided_at', null),
+      sb
+        .from('sales')
+        .select('total')
+        .gte('created_at', today.toISOString())
+        .lt('created_at', tomorrow.toISOString())
+        .not('payment_method', 'is', null)
+        .is('voided_at', null),
+    ])
+
+    if (version !== loadVersion.current) return
+    if (snackRes.error || paidTodayRes.error) {
+      setErr(msg(snackRes.error || paidTodayRes.error))
+      return
+    }
 
     const totals = ((snackRes.data || []) as { session_id: string; total: number }[]).reduce(
       (acc, cur) => {
@@ -97,17 +190,33 @@ export default function CounterPage() {
     )
 
     setSnackTotals(totals)
+    const paidTotal = ((paidTodayRes.data || []) as { total: number }[]).reduce(
+      (sum, sale) => sum + Number(sale.total),
+      0
+    )
+    setTodaySnackRevenue(paidTotal)
+    setLocalSnapshot('todaySnackRevenue', paidTotal)
     setLocalSnapshot('snackTotals', totals)
-  }, [])
+  }, [profile?.zone_id, user?.id, hydrateLocalSnapshot])
 
   useEffect(() => {
-    loadData()
+    hydrateLocalSnapshot()
+    void loadData()
+    const refresh = () => void loadData()
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
     const channel = sb
       .channel('counter-sessions')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, refresh)
       .subscribe()
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', onVisibilityChange)
 
     return () => {
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
       sb.removeChannel(channel)
     }
   }, [loadData])
@@ -121,16 +230,82 @@ export default function CounterPage() {
     await loadData()
   }
 
-  // Adjust games counter (+1 / -1) with optimistic UI
-  const adjustCounter = (session: Session, delta: number) => {
-    if (session.games_count + delta < 0 || session.games_count + delta > 200) return
+  const startSession = async (station: Station) => {
+    const sessionId = crypto.randomUUID()
+    const optimisticSession: Session = {
+      id: sessionId,
+      station_id: station.id,
+      employee_id: user?.id || '',
+      games_count: 0,
+      price_snapshot: station.price,
+      started_at: new Date().toISOString(),
+      status: 'open',
+      total_amount: null,
+      ended_at: null,
+      paused_at: null,
+      fifa_extra_charge: 0,
+      fifa_extra_time_applied: false,
+      fifa_penalties_applied: false,
+    }
 
-    setSessions((prev) =>
-      prev.map((s) => (s.id === session.id ? { ...s, games_count: s.games_count + delta } : s))
+    setErr('')
+    const result = await executeOrQueue(
+      'start_session',
+      { p_station: station.id, p_session_id: sessionId },
+      {
+        userId: user?.id,
+        zoneId: profile?.zone_id || '',
+        targetId: station.id,
+        description: `Start ${station.name}`,
+      }
     )
 
-    runAction(() =>
-      executeOrQueue(
+    if (result.error) {
+      setErr(msg(result.error))
+      await loadData()
+      return
+    }
+
+    if (result.queued) {
+      sessionCounts.current[sessionId] = 0
+      setSessions((previous) => {
+        const next = [...previous.filter((session) => session.station_id !== station.id), optimisticSession]
+        setLocalSnapshot('sessions', next)
+        return next
+      })
+      return
+    }
+
+    await loadData()
+  }
+
+  // Adjust games counter (+1 / -1) with optimistic UI
+  const adjustCounter = (session: Session, delta: number) => {
+    if (closedSessionIds.current.has(session.id)) {
+      void loadData()
+      return
+    }
+    const current = sessionCounts.current[session.id] ?? session.games_count
+    const next = current + delta
+    if (next < 0 || next > 200) return
+
+    sessionCounts.current[session.id] = next
+    pendingAdjustments.current[session.id] = (pendingAdjustments.current[session.id] || 0) + delta
+    setSessions((prev) =>
+      prev.map((s) => (s.id === session.id ? { ...s, games_count: next } : s))
+    )
+    const cachedSessions = getLocalSnapshot<Session[]>('sessions').data
+    if (cachedSessions) {
+      setLocalSnapshot(
+        'sessions',
+        cachedSessions.map((s) => (s.id === session.id ? { ...s, games_count: next } : s))
+      )
+    }
+
+    const previous = adjustQueues.current[session.id] || Promise.resolve()
+    const action = previous.then(async () => {
+      setErr('')
+      const result = await executeOrQueue(
         'adjust_session',
         {
           p_session: session.id,
@@ -144,7 +319,32 @@ export default function CounterPage() {
           description: `${delta > 0 ? '+1' : '-1'} Game`,
         }
       )
-    )
+
+      pendingAdjustments.current[session.id] =
+        (pendingAdjustments.current[session.id] || 0) - delta
+      if (result.error) {
+        if (/SESSION_ALREADY_ENDED|This session has already ended/i.test(result.error.message)) {
+          closedSessionIds.current.add(session.id)
+        } else {
+          setErr(msg(result.error))
+        }
+        await loadData()
+        return
+      }
+
+      if (typeof result.data === 'number') {
+        const visibleCount = result.data + (pendingAdjustments.current[session.id] || 0)
+        sessionCounts.current[session.id] = visibleCount
+        setSessions((prev) =>
+          prev.map((s) => (s.id === session.id ? { ...s, games_count: visibleCount } : s))
+        )
+      }
+
+      // A queued offline adjustment stays visible until the queue syncs and the
+      // realtime subscription refreshes the authoritative session row.
+      if (!result.queued) await loadData()
+    })
+    adjustQueues.current[session.id] = action
   }
 
   // Pause / Resume Session
@@ -201,11 +401,11 @@ export default function CounterPage() {
       prev.map((x) =>
         x.id === s.id
           ? {
-              ...x,
-              status: 'ended',
-              total_amount: s.games_count * s.price_snapshot + (s.fifa_extra_charge || 0),
-              ended_at: new Date().toISOString(),
-            }
+            ...x,
+            status: 'ended',
+            total_amount: s.games_count * s.price_snapshot + (s.fifa_extra_charge || 0),
+            ended_at: new Date().toISOString(),
+          }
           : x
       )
     )
@@ -228,11 +428,13 @@ export default function CounterPage() {
     )
   }
 
-  const myEndedSessions = sessions.filter(
-    (s) => s.employee_id === user?.id && s.status === 'ended'
+  const myTodaySessions = sessions.filter(
+    (s) => s.employee_id === user?.id && s.status !== 'cancelled'
   )
-  const totalGamesDone = myEndedSessions.reduce((acc, s) => acc + s.games_count, 0)
-  const totalMoneyCollected = myEndedSessions.reduce((acc, s) => acc + (s.total_amount ?? 0), 0)
+  const totalGamesDone = myTodaySessions.reduce((acc, s) => acc + s.games_count, 0)
+  const myEndedSessions = myTodaySessions.filter((s) => s.status === 'ended')
+  const totalMoneyCollected =
+    myEndedSessions.reduce((acc, s) => acc + (s.total_amount ?? 0), 0) + todaySnackRevenue
 
   // Reopen window check
   const reopenWindowMs = (zone?.max_employees ? 5 : 5) * 60 * 1000
@@ -260,16 +462,16 @@ export default function CounterPage() {
       profile={profile}
       zone={zone}
       title={t('Today')}
-      subtitle={`${totalGamesDone} ${t('games finished')} · ${etb(totalMoneyCollected)} collected`}
+      subtitle={`${totalGamesDone} ${t('games')} · ${etb(totalMoneyCollected)} collected`}
       onRefresh={loadData}
       action={
-        <button
+        <ActionButton
           onClick={() => setActiveSnackSession(null)}
           className="btn btn-outline-gold text-xs px-3 h-9 font-bold"
         >
           <span>🍿</span>
           <span className="hidden sm:inline">{t('Snack sale')}</span>
-        </button>
+        </ActionButton>
       }
     >
       <div className="space-y-5">
@@ -294,14 +496,14 @@ export default function CounterPage() {
                   {st?.name || 'Unit'} ended · {s.games_count} {t('games')}
                 </span>
               </div>
-              <button
+              <ActionButton
                 onClick={() =>
                   runAction(() => sb.rpc('reopen_session', { p_session: s.id }))
                 }
                 className="btn btn-gold text-xs h-8 px-3 shrink-0"
               >
                 {t('Reopen')}
-              </button>
+              </ActionButton>
             </div>
           )
         })}
@@ -322,13 +524,12 @@ export default function CounterPage() {
             return (
               <section
                 key={st.id}
-                className={`relative rounded-3xl border p-4.5 transition-all shadow-lg flex flex-col justify-between ${
-                  openSession
-                    ? isPaused
-                      ? 'border-warning/50 bg-surface/90 ring-1 ring-warning/30'
-                      : 'border-brand/60 bg-surface ring-1 ring-brand/40 shadow-glow-sm'
-                    : 'border-line/70 bg-surface/60 hover:border-line'
-                }`}
+                className={`relative rounded-3xl border p-4.5 transition-all shadow-lg flex flex-col justify-between ${openSession
+                  ? isPaused
+                    ? 'border-warning/50 bg-surface/90 ring-1 ring-warning/30'
+                    : 'border-brand/60 bg-surface ring-1 ring-brand/40 shadow-glow-sm'
+                  : 'border-line/70 bg-surface/60 hover:border-line'
+                  }`}
               >
                 {/* Station header */}
                 <div>
@@ -349,22 +550,20 @@ export default function CounterPage() {
 
                     <div className="text-right">
                       <span
-                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
-                          openSession
-                            ? isPaused
-                              ? 'bg-warning/20 text-warning border border-warning/40'
-                              : 'bg-brand/20 text-brand border border-brand/40'
-                            : 'bg-ok/20 text-ok border border-ok/40'
-                        }`}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${openSession
+                          ? isPaused
+                            ? 'bg-warning/20 text-warning border border-warning/40'
+                            : 'bg-brand/20 text-brand border border-brand/40'
+                          : 'bg-ok/20 text-ok border border-ok/40'
+                          }`}
                       >
                         <span
-                          className={`h-1.5 w-1.5 rounded-full ${
-                            openSession
-                              ? isPaused
-                                ? 'bg-warning'
-                                : 'bg-brand animate-pulse'
-                              : 'bg-ok'
-                          }`}
+                          className={`h-1.5 w-1.5 rounded-full ${openSession
+                            ? isPaused
+                              ? 'bg-warning'
+                              : 'bg-brand animate-pulse'
+                            : 'bg-ok'
+                            }`}
                         />
                         {openSession ? (isPaused ? 'Paused' : t('In use')) : t('Free')}
                       </span>
@@ -416,89 +615,76 @@ export default function CounterPage() {
                 {/* Counter Actions */}
                 <div className="pt-2 border-t border-line/60">
                   {!openSession ? (
-                    <button
-                      onClick={() =>
-                        runAction(() =>
-                          executeOrQueue(
-                            'start_session' as any,
-                            { p_station: st.id },
-                            {
-                              userId: user?.id,
-                              zoneId: profile?.zone_id || '',
-                              targetId: st.id,
-                              description: `Start ${st.name}`,
-                            }
-                          )
-                        )
-                      }
+                    <ActionButton
+                      onClick={() => startSession(st)}
                       className="btn btn-gold w-full"
                     >
                       <span>▶</span>
                       <span>{t('Start session')}</span>
-                    </button>
+                    </ActionButton>
                   ) : (
                     <div className="space-y-2">
                       {/* Big Quick Touch Adjust Buttons */}
                       <div className="grid grid-cols-3 gap-2">
-                        <button
+                        <ActionButton
+                          feedbackMs={110}
                           aria-label="Remove one game"
                           onClick={() => adjustCounter(openSession, -1)}
                           className="btn btn-secondary text-2xl font-black h-13 active:bg-bad/20"
                         >
                           −
-                        </button>
-                        <button
+                        </ActionButton>
+                        <ActionButton
                           onClick={() => setActiveEndSession(openSession)}
                           className="btn border border-brand/60 bg-brand/10 text-brand font-bold text-xs hover:bg-brand/20"
                         >
                           {t('End')}
-                        </button>
-                        <button
+                        </ActionButton>
+                        <ActionButton
+                          feedbackMs={110}
                           aria-label="Add one game"
                           onClick={() => adjustCounter(openSession, 1)}
                           className="btn btn-gold text-2xl font-black h-13"
                         >
                           +
-                        </button>
+                        </ActionButton>
                       </div>
 
                       {/* Micro actions: Snacks, Pause, FIFA rules, Handover */}
                       <div className="grid grid-cols-3 gap-1 text-[11px]">
-                        <button
+                        <ActionButton
                           onClick={() => setActiveSnackSession(openSession.id)}
                           className="rounded-lg border border-line bg-surface-elevated py-1.5 px-1 font-semibold text-ink-muted hover:border-brand/40 hover:text-ink transition-colors truncate"
                         >
                           🍿 {t('Add snacks')}
-                        </button>
-                        <button
+                        </ActionButton>
+                        <ActionButton
                           onClick={() => togglePause(openSession)}
-                          className={`rounded-lg border py-1.5 px-1 font-semibold transition-colors truncate ${
-                            isPaused
-                              ? 'border-warning bg-warning/20 text-warning font-bold'
-                              : 'border-line bg-surface-elevated text-ink-muted hover:border-brand/40'
-                          }`}
+                          className={`rounded-lg border py-1.5 px-1 font-semibold transition-colors truncate ${isPaused
+                            ? 'border-warning bg-warning/20 text-warning font-bold'
+                            : 'border-line bg-surface-elevated text-ink-muted hover:border-brand/40'
+                            }`}
                         >
                           {isPaused ? '▶ Resume' : '⏸ Pause'}
-                        </button>
-                        <button
+                        </ActionButton>
+                        <ActionButton
                           onClick={() => setActiveFifaSession(openSession)}
-                          className={`rounded-lg border py-1.5 px-1 font-semibold transition-colors truncate ${
-                            openSession.fifa_extra_time_applied || openSession.fifa_penalties_applied
-                              ? 'border-brand bg-brand/20 text-brand'
-                              : 'border-line bg-surface-elevated text-ink-muted hover:border-brand/40'
-                          }`}
+                          className={`rounded-lg border py-1.5 px-1 font-semibold transition-colors truncate ${openSession.fifa_extra_time_applied || openSession.fifa_penalties_applied
+                            ? 'border-brand bg-brand/20 text-brand'
+                            : 'border-line bg-surface-elevated text-ink-muted hover:border-brand/40'
+                            }`}
                         >
                           ⚽ FIFA Tie
-                        </button>
+                        </ActionButton>
                       </div>
 
                       <div className="pt-1 flex items-center justify-between text-[11px] text-ink-dim">
-                        <button
+                        <ActionButton
                           onClick={() => setActiveHandoverSession(openSession.id)}
                           className="hover:text-brand underline"
                         >
                           {t('Hand over to a colleague')}
-                        </button>
+                        </ActionButton>
                         {openSession.employee_id !== user?.id && (
                           <span className="text-[10px] text-warning italic">
                             Started by colleague
@@ -538,12 +724,12 @@ export default function CounterPage() {
                   {stations.find((x) => x.id === activeEndSession.station_id)?.name}
                 </p>
               </div>
-              <button
+              <ActionButton
                 onClick={() => setActiveEndSession(null)}
                 className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface-elevated text-sm text-ink-muted"
               >
                 ✕
-              </button>
+              </ActionButton>
             </div>
 
             {/* Bill Summary */}
@@ -577,8 +763,8 @@ export default function CounterPage() {
                 <span className="font-display text-2xl font-extrabold text-brand">
                   {etb(
                     activeEndSession.games_count * activeEndSession.price_snapshot +
-                      (snackTotals[activeEndSession.id] || 0) +
-                      (activeEndSession.fifa_extra_charge || 0)
+                    (snackTotals[activeEndSession.id] || 0) +
+                    (activeEndSession.fifa_extra_charge || 0)
                   )}
                 </span>
               </div>
@@ -595,23 +781,23 @@ export default function CounterPage() {
               <p className="text-xs font-semibold text-ink-muted">{t('How did they pay?')}</p>
               <div className="grid grid-cols-3 gap-2">
                 {(['cash', 'telebirr', 'cbe'] as const).map((method) => (
-                  <button
+                  <ActionButton
                     key={method}
                     onClick={() => confirmEndSession(method)}
                     className="btn btn-secondary text-xs uppercase font-extrabold tracking-wider hover:border-brand hover:text-brand"
                   >
                     {method === 'cbe' ? 'CBE' : t(method)}
-                  </button>
+                  </ActionButton>
                 ))}
               </div>
             </div>
 
-            <button
+            <ActionButton
               onClick={() => setActiveEndSession(null)}
               className="btn btn-secondary w-full text-xs text-ink-dim"
             >
               {t('Keep counting')}
-            </button>
+            </ActionButton>
           </div>
         </div>
       )}
@@ -629,27 +815,27 @@ export default function CounterPage() {
               Select tied match extension according to your game zone rules:
             </p>
             <div className="space-y-2">
-              <button
+              <ActionButton
                 onClick={() => applyFifaTieBreak(activeFifaSession, 'extra_time')}
                 className="btn btn-secondary w-full justify-between text-xs"
               >
                 <span>⏱ Extra Time</span>
                 <span className="text-brand font-bold">Apply Rule →</span>
-              </button>
-              <button
+              </ActionButton>
+              <ActionButton
                 onClick={() => applyFifaTieBreak(activeFifaSession, 'penalties')}
                 className="btn btn-secondary w-full justify-between text-xs"
               >
                 <span>🥅 Penalty Shootout</span>
                 <span className="text-brand font-bold">Apply Rule →</span>
-              </button>
+              </ActionButton>
             </div>
-            <button
+            <ActionButton
               onClick={() => setActiveFifaSession(null)}
               className="btn btn-secondary w-full text-xs"
             >
               Cancel
-            </button>
+            </ActionButton>
           </div>
         </div>
       )}

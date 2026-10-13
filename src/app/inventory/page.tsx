@@ -1,4 +1,5 @@
 'use client'
+import ActionButton from '@/components/ActionButton'
 
 import React, { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -6,6 +7,7 @@ import { sb, msg, etb } from '@/lib/supabase'
 import { useAuthGuard } from '@/lib/auth'
 import AppLayout from '@/components/AppLayout'
 import { subMoney } from '@/lib/finance'
+import { getLocalSnapshot, setLocalSnapshot } from '@/lib/offline'
 
 interface InventoryItem {
   id: string
@@ -25,6 +27,7 @@ export default function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([])
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [hasLocalSnapshot, setHasLocalSnapshot] = useState(false)
 
   // New item form
   const [newItem, setNewItem] = useState({
@@ -36,7 +39,19 @@ export default function InventoryPage() {
     low_stock_threshold: '5',
   })
 
+  const hydrateLocalSnapshot = useCallback(() => {
+    const snapItems = getLocalSnapshot<InventoryItem[]>('inventory_items')
+    let hasAny = false
+    if (snapItems.data) {
+      setItems(snapItems.data)
+      hasAny = true
+    }
+    setHasLocalSnapshot(hasAny)
+    return hasAny
+  }, [])
+
   const loadInventory = useCallback(async () => {
+    hydrateLocalSnapshot()
     const res = await sb
       .from('inventory_items')
       .select('*')
@@ -48,12 +63,15 @@ export default function InventoryPage() {
       return
     }
 
-    setItems((res.data as InventoryItem[]) || [])
-  }, [])
+    const nextItems = (res.data as InventoryItem[]) || []
+    setItems(nextItems)
+    setLocalSnapshot('inventory_items', nextItems)
+  }, [hydrateLocalSnapshot])
 
   useEffect(() => {
-    loadInventory()
-  }, [loadInventory])
+    hydrateLocalSnapshot()
+    void loadInventory()
+  }, [loadInventory, hydrateLocalSnapshot])
 
   const handleUpdate = async (id: string, field: keyof InventoryItem, value: unknown) => {
     setBusy(true)
@@ -102,10 +120,14 @@ export default function InventoryPage() {
     (i) => i.track_stock && i.stock_qty <= i.low_stock_threshold
   )
 
-  if (loading) {
+  if (loading && !hasLocalSnapshot) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-bg text-ink">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+      <div className="flex min-h-dvh items-center justify-center bg-bg px-4 text-ink">
+        <div className="surface-card w-full max-w-sm p-6 text-center shadow-2xl shadow-brand/10">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-3 border-brand border-t-transparent" />
+          <p className="font-display text-lg font-bold text-ink">Loading inventory…</p>
+          <p className="mt-1 text-xs text-ink-muted">Checking stock and catalog details.</p>
+        </div>
       </div>
     )
   }
@@ -222,9 +244,9 @@ export default function InventoryPage() {
                 </div>
               )}
 
-              <button disabled={busy} className="btn btn-gold text-xs px-4">
+              <ActionButton disabled={busy} className="btn btn-gold text-xs px-4">
                 {busy ? 'Saving…' : 'Add to Menu'}
-              </button>
+              </ActionButton>
             </div>
           </form>
         </div>
@@ -240,9 +262,8 @@ export default function InventoryPage() {
               return (
                 <div
                   key={item.id}
-                  className={`surface-card p-4 space-y-3 transition-all ${
-                    isLow ? 'border-warning/50 bg-warning/5' : ''
-                  }`}
+                  className={`surface-card p-4 space-y-3 transition-all ${isLow ? 'border-warning/50 bg-warning/5' : ''
+                    }`}
                 >
                   <div className="flex items-start justify-between">
                     <div>
@@ -252,7 +273,7 @@ export default function InventoryPage() {
                       </p>
                     </div>
 
-                    <button
+                    <ActionButton
                       onClick={() =>
                         confirm(`Archive "${item.name}" from active menu?`) &&
                         handleUpdate(item.id, 'is_archived', true)
@@ -260,7 +281,7 @@ export default function InventoryPage() {
                       className="text-xs text-bad hover:underline font-semibold"
                     >
                       Archive
-                    </button>
+                    </ActionButton>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 text-xs">
@@ -312,9 +333,8 @@ export default function InventoryPage() {
                             Number(e.target.value) !== item.stock_qty &&
                             handleUpdate(item.id, 'stock_qty', Number(e.target.value))
                           }
-                          className={`inp text-xs font-bold h-9 ${
-                            isLow ? 'text-warning border-warning' : ''
-                          }`}
+                          className={`inp text-xs font-bold h-9 ${isLow ? 'text-warning border-warning' : ''
+                            }`}
                         />
                       </div>
                       <div>
