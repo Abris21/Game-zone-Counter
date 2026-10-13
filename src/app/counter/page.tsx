@@ -539,7 +539,7 @@ export default function CounterPage() {
                         {st.kind === 'ps5' ? '🎮' : st.kind === 'ps4' ? '🕹️' : '🎱'}
                       </span>
                       <div className="min-w-0">
-                        <h2 className="break-words font-display text-sm font-bold leading-tight text-ink sm:text-lg">
+                        <h2 className="min-w-0 break-words font-display text-sm font-bold leading-tight text-ink sm:text-lg">
                           {st.name}
                         </h2>
                         <span className="text-[9px] font-extrabold uppercase tracking-wider text-ink-dim sm:text-[10px]">
@@ -589,24 +589,24 @@ export default function CounterPage() {
                       </div>
 
                       {/* Current bill total & snack badges */}
-                      <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 text-xs sm:mt-3">
-                        <span className="font-display font-extrabold text-brand text-sm">
+                      <div className="mt-2 flex min-w-0 flex-wrap items-center justify-center gap-1.5 text-xs sm:mt-3">
+                        <span className="max-w-full break-words font-display text-sm font-extrabold leading-tight text-brand">
                           {etb(currentTotal)}
                         </span>
                         {snacksSum > 0 && (
-                          <span className="rounded-md bg-surface-elevated px-1.5 py-0.5 text-[10px] text-ink-muted border border-line">
+                          <span className="max-w-full break-words rounded-md border border-line bg-surface-elevated px-1.5 py-0.5 text-[10px] leading-tight text-ink-muted">
                             +{etb(snacksSum)} snacks
                           </span>
                         )}
                         {fifaCharge > 0 && (
-                          <span className="rounded-md bg-brand/10 px-1.5 py-0.5 text-[10px] text-brand border border-brand/30">
+                          <span className="max-w-full break-words rounded-md border border-brand/30 bg-brand/10 px-1.5 py-0.5 text-[10px] leading-tight text-brand">
                             +{etb(fifaCharge)} FIFA
                           </span>
                         )}
                       </div>
                     </div>
                   ) : (
-                    <div className="py-5 text-center text-[11px] text-ink-dim sm:py-8 sm:text-xs">
+                    <div className="break-words py-5 text-center text-[11px] leading-snug text-ink-dim sm:py-8 sm:text-xs">
                       Ready for next players
                     </div>
                   )}
@@ -620,7 +620,7 @@ export default function CounterPage() {
                       className="btn btn-gold w-full"
                     >
                       <span>▶</span>
-                      <span>{t('Start session')}</span>
+                      <span className="min-w-0 break-words text-center leading-tight">{t('Start session')}</span>
                     </ActionButton>
                   ) : (
                     <div className="space-y-2">
@@ -646,7 +646,7 @@ export default function CounterPage() {
                           onClick={() => setActiveEndSession(openSession)}
                           className="btn col-span-2 min-w-0 px-1 text-[10px] font-bold text-brand border border-brand/60 bg-brand/10 hover:bg-brand/20 sm:col-span-1 sm:text-xs"
                         >
-                          {t('End')}
+                          <span className="min-w-0 break-words text-center leading-tight">{t('End')}</span>
                         </ActionButton>
                       </div>
 
@@ -654,13 +654,13 @@ export default function CounterPage() {
                       <div className="grid grid-cols-2 gap-1.5 text-[10px] sm:grid-cols-3 sm:gap-1 sm:text-[11px]">
                         <ActionButton
                           onClick={() => setActiveSnackSession(openSession.id)}
-                          className="min-h-10 whitespace-normal break-words rounded-lg border border-line bg-surface-elevated px-1 py-1.5 text-center font-semibold leading-tight text-ink-muted transition-colors hover:border-brand/40 hover:text-ink"
+                          className="flex min-h-10 flex-col items-center justify-center whitespace-normal break-words rounded-lg border border-line bg-surface-elevated px-1 py-1.5 text-center font-semibold leading-tight text-ink-muted transition-colors hover:border-brand/40 hover:text-ink"
                         >
                           🍿 {t('Add snacks')}
                         </ActionButton>
                         <ActionButton
                           onClick={() => togglePause(openSession)}
-                          className={`min-h-10 whitespace-normal break-words rounded-lg border px-1 py-1.5 text-center font-semibold leading-tight transition-colors ${isPaused
+                          className={`flex min-h-10 flex-col items-center justify-center whitespace-normal break-words rounded-lg border px-1 py-1.5 text-center font-semibold leading-tight transition-colors ${isPaused
                             ? 'border-warning bg-warning/20 text-warning font-bold'
                             : 'border-line bg-surface-elevated text-ink-muted hover:border-brand/40'
                             }`}
@@ -669,7 +669,7 @@ export default function CounterPage() {
                         </ActionButton>
                         <ActionButton
                           onClick={() => setActiveFifaSession(openSession)}
-                          className={`col-span-2 min-h-10 whitespace-normal break-words rounded-lg border px-1 py-1.5 text-center font-semibold leading-tight transition-colors sm:col-span-1 ${openSession.fifa_extra_time_applied || openSession.fifa_penalties_applied
+                          className={`col-span-2 flex min-h-10 flex-col items-center justify-center whitespace-normal break-words rounded-lg border px-1 py-1.5 text-center font-semibold leading-tight transition-colors sm:col-span-1 ${openSession.fifa_extra_time_applied || openSession.fifa_penalties_applied
                             ? 'border-brand bg-brand/20 text-brand'
                             : 'border-line bg-surface-elevated text-ink-muted hover:border-brand/40'
                             }`}
@@ -683,11 +683,11 @@ export default function CounterPage() {
                           onClick={() => setActiveHandoverSession(openSession.id)}
                           className="hover:text-brand underline"
                         >
-                          {t('Hand over to a colleague')}
+                          <span className="block max-w-full whitespace-normal break-words text-left leading-tight">{t('Hand over to a colleague')}</span>
                         </ActionButton>
                         {openSession.employee_id !== user?.id && (
                           <span className="text-[10px] text-warning italic">
-                            Started by colleague
+                            <span className="block max-w-full whitespace-normal break-words leading-tight">Started by colleague</span>
                           </span>
                         )}
                       </div>
