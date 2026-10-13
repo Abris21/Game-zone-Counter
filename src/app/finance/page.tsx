@@ -245,12 +245,8 @@ export default function FinancePage() {
       onRefresh={loadFinanceData}
       action={
         <div className="flex items-center gap-2">
-          <ActionButton onClick={exportCSV} className="btn btn-secondary text-xs h-9 px-3">
-            📥 Export CSV
-          </ActionButton>
-          <ActionButton onClick={exportPDF} className="btn btn-outline-gold text-xs h-9 px-3">
-            🖨️ Print Report
-          </ActionButton>
+          <ActionButton onClick={exportCSV} className="btn btn-secondary text-xs h-9 px-3"><span className="sm:hidden">CSV</span><span className="hidden sm:inline">Export CSV</span></ActionButton>
+          <ActionButton onClick={exportPDF} className="btn btn-outline-gold text-xs h-9 px-3"><span className="sm:hidden">Print</span><span className="hidden sm:inline">Print Report</span></ActionButton>
         </div>
       }
     >

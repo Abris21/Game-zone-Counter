@@ -108,6 +108,13 @@ textarea {
   touch-action: manipulation;
 }
 
+[role="dialog"] > div,
+[role="dialog"] > form {
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 /* Smooth theme transitions */
 *,
 ::before,

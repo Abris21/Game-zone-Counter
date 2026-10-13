@@ -400,13 +400,13 @@ export default function EmployeeDayPage() {
         )}
 
         {/* Payment Summary Cards */}
-        <div className="grid grid-cols-3 gap-2.5 text-center">
+        <div className="grid grid-cols-3 gap-1.5 text-center sm:gap-2.5">
           {(['cash', 'telebirr', 'cbe'] as const).map((method) => (
-            <div key={method} className="surface-card p-3 space-y-1">
-              <p className="text-[11px] font-extrabold uppercase tracking-wider text-ink-muted">
+            <div key={method} className="surface-card min-w-0 p-2.5 space-y-1 sm:p-3">
+              <p className="truncate text-[10px] font-extrabold uppercase tracking-wider text-ink-muted sm:text-[11px]">
                 {method === 'cbe' ? 'CBE' : t(method)}
               </p>
-              <p className="font-display text-base sm:text-lg font-bold text-ink">
+              <p className="truncate font-display text-xs font-bold text-ink sm:text-lg">
                 {etb(totalSum(method))}
               </p>
             </div>
@@ -430,8 +430,8 @@ export default function EmployeeDayPage() {
               </h3>
               <div className="space-y-1.5 divide-y divide-line/60">
                 {list.map((s, idx) => (
-                  <div key={s.id} className="pt-1.5 flex justify-between items-center text-xs">
-                    <div>
+                  <div key={s.id} className="flex flex-col gap-1 pt-1.5 text-xs sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
                       <span className="font-semibold text-ink">
                         {t('Session')} {idx + 1}
                       </span>

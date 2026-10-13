@@ -48,6 +48,13 @@ let cachedGuardState: { userId: string; state: Omit<AuthState, 'loading' | 'erro
 let cachedZone: { zoneId: string; zone: GameZone | null; timestamp: number } | null = null
 const AUTH_CACHE_MS = 30_000
 
+/** Clear client-side auth snapshots after a profile/security change. */
+export function invalidateAuthCache() {
+  cachedProfile = null
+  cachedGuardState = null
+  cachedZone = null
+}
+
 /**
  * Validates the current user session and fetches the verified database profile.
  * Server-authoritative: does not trust localStorage for role information.

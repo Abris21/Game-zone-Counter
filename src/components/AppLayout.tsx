@@ -215,10 +215,10 @@ export default function AppLayout({
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex flex-1 flex-col pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
+      <div className="flex min-w-0 flex-1 flex-col pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
         {/* Top Header */}
-        <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-2 border-b border-line bg-bg/90 px-4 py-2 backdrop-blur-md lg:px-8">
-          <div className="flex items-center gap-3">
+        <header className="sticky top-0 z-30 flex min-h-16 flex-wrap items-center justify-between gap-2 border-b border-line bg-bg/90 px-4 py-2 backdrop-blur-md lg:px-8">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
             {/* Mobile menu button */}
             <ActionButton
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -237,15 +237,14 @@ export default function AppLayout({
               <h1 className="truncate font-display text-lg font-bold leading-tight text-ink sm:text-2xl">
                 {title}
               </h1>
-              {subtitle && <p className="text-xs text-ink-muted">{subtitle}</p>}
+              {subtitle && <p className="hidden truncate text-xs text-ink-muted sm:block">{subtitle}</p>}
             </div>
           </div>
 
           {/* Right header controls */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-3">
             {/* Connectivity badge — spec requirement 4.1 */}
-            <ConnectivityBadge />
-            {action}
+            <div className="hidden sm:block"><ConnectivityBadge /></div>
             <Bell />
             {/* Theme toggle — spec requirement 4.4 */}
             <ThemeToggle compact />
@@ -256,6 +255,11 @@ export default function AppLayout({
               {lang === 'am' ? 'EN' : 'አማ'}
             </ActionButton>
           </div>
+          {action && (
+            <div className="order-3 flex w-full items-center justify-end sm:order-none sm:ml-2 sm:w-auto">
+              {action}
+            </div>
+          )}
         </header>
 
         {/* Mobile slide-down navigation drawer */}
@@ -293,7 +297,7 @@ export default function AppLayout({
         )}
 
         {/* Page body */}
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 max-w-6xl w-full mx-auto">
+        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 max-w-6xl w-full mx-auto">
           <NetBanner
             onSynced={() => onRefresh?.()}
             userId={profile?.id}
@@ -333,11 +337,11 @@ export default function AppLayout({
               prefetch
               onTouchStart={() => router.prefetch(item.href)}
               onClick={() => startNavigation(item.href)}
-              className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 text-xs font-semibold transition-colors ${active ? 'text-brand' : 'text-ink-muted hover:text-ink'
+              className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 py-1 px-1 text-xs font-semibold transition-colors ${active ? 'text-brand' : 'text-ink-muted hover:text-ink'
                 }`}
             >
               <span className="text-lg leading-none">{item.icon}</span>
-              <span className="text-[10px] tracking-tight truncate">{item.label}</span>
+              <span className="max-w-full truncate text-[10px] tracking-tight">{item.label}</span>
               {active && <span className="h-1 w-3 rounded-full bg-brand" />}
             </Link>
           )

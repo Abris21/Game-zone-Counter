@@ -4,7 +4,7 @@ import ActionButton from '@/components/ActionButton'
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { sb, api, msg } from '@/lib/supabase'
-import { useAuthGuard, ROLE_HOMES, UserRole } from '@/lib/auth'
+import { invalidateAuthCache, useAuthGuard, ROLE_HOMES, UserRole } from '@/lib/auth'
 import AppLayout from '@/components/AppLayout'
 import Prefs from '@/components/Prefs'
 
@@ -17,15 +17,14 @@ export default function AccountPage() {
   const [newPassword, setNewPassword] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deletePassword, setDeletePassword] = useState('')
-  const [isForced, setIsForced] = useState(false)
+  const [forceRequested, setForceRequested] = useState(false)
+  const isForced = forceRequested || Boolean(profile?.must_change_password)
   const [okMsg, setOkMsg] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setIsForced(window.location.search.includes('force=1'))
-    }
+    setForceRequested(new URLSearchParams(window.location.search).get('force') === '1')
     if (profile?.full_name) {
       setName(profile.full_name)
     }
@@ -71,19 +70,28 @@ export default function AccountPage() {
     }
 
     const { error } = await sb.auth.updateUser({ password: newPassword })
-    setBusy(false)
     if (error) {
+      setBusy(false)
       notify('', error.message)
     } else {
+      const { error: clearError } = await sb.rpc('clear_must_change')
+      if (clearError) {
+        setCurrentPassword(newPassword)
+        setNewPassword('')
+        setBusy(false)
+        notify('', `Your password was changed, but the required-change flag could not be cleared. Enter your new password as the current password, choose your personal password again, and retry. ${msg(clearError)}`)
+        return
+      }
       setCurrentPassword('')
       setNewPassword('')
-      await sb.rpc('clear_must_change')
       if (isForced) {
+        invalidateAuthCache()
         const home = ROLE_HOMES[profile?.role as UserRole] || '/counter'
         router.replace(home)
       } else {
         notify('Password updated successfully.')
       }
+      setBusy(false)
     }
   }
 
@@ -118,6 +126,35 @@ export default function AccountPage() {
     )
   }
 
+  if (isForced) {
+    return (
+      <main className="flex min-h-dvh items-center justify-center bg-bg px-4 py-8 text-ink">
+        <section className="w-full max-w-md space-y-5">
+          <header className="text-center">
+            <h1 className="font-display text-2xl font-extrabold">Set your personal password</h1>
+            <p className="mt-2 rounded-xl border border-brand/50 bg-brand/10 p-3 text-sm font-semibold text-brand">
+              Please set a new personal password before accessing the system.
+            </p>
+          </header>
+          {err && <div role="alert" className="rounded-xl border border-bad/40 bg-bad/10 p-3 text-sm text-bad">{err}</div>}
+          <form onSubmit={handleChangePassword} className="surface-card space-y-4 p-5">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-ink-muted">Temporary password</label>
+              <input required type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="inp text-sm" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-ink-muted">New personal password (8+ characters)</label>
+              <input required minLength={8} type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="inp text-sm" />
+            </div>
+            <ActionButton disabled={busy} className="btn btn-gold w-full text-sm">
+              {busy ? 'Updating password…' : 'Set password and continue'}
+            </ActionButton>
+          </form>
+        </section>
+      </main>
+    )
+  }
+
   return (
     <AppLayout
       profile={profile}
@@ -144,7 +181,7 @@ export default function AccountPage() {
         )}
 
         {/* Profile Card */}
-        <form onSubmit={handleSaveName} className="surface-card p-5 space-y-3">
+        {!isForced && <form onSubmit={handleSaveName} className="surface-card p-5 space-y-3">
           <h2 className="font-display text-base font-bold text-ink">Personal Profile</h2>
           <div className="space-y-1">
             <label className="block text-xs font-semibold text-ink-muted">Full Name</label>
@@ -162,7 +199,7 @@ export default function AccountPage() {
           <ActionButton disabled={busy} className="btn btn-gold text-xs">
             Save Name
           </ActionButton>
-        </form>
+        </form>}
 
         {/* Change Password */}
         <form onSubmit={handleChangePassword} className="surface-card p-5 space-y-3">
@@ -203,10 +240,10 @@ export default function AccountPage() {
         </form>
 
         {/* Preferences: Language & Calendar */}
-        <Prefs />
+        {!isForced && <Prefs />}
 
         {/* Sign Out Everywhere */}
-        <div className="surface-card p-5 space-y-2">
+        {!isForced && <div className="surface-card p-5 space-y-2">
           <h2 className="font-display text-base font-bold text-ink">Device Sessions</h2>
           <p className="text-xs text-ink-muted">
             Revoke all active logins and refresh tokens across all mobile and desktop devices.
@@ -220,10 +257,10 @@ export default function AccountPage() {
           >
             Sign Out on All Devices
           </ActionButton>
-        </div>
+        </div>}
 
         {/* Danger Zone for Owners */}
-        {profile?.role === 'admin' && (
+        {!isForced && profile?.role === 'admin' && (
           <form
             onSubmit={handleDeleteZone}
             className="rounded-2xl border border-bad/40 bg-bad/5 p-5 space-y-3"

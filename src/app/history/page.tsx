@@ -194,17 +194,17 @@ export default function HistoryPage() {
               <EthDate iso={date} />
             </div>
 
-            <div className="flex rounded-xl bg-surface-elevated p-1 border border-line">
+            <div className="flex min-w-0 flex-1 rounded-xl bg-surface-elevated p-1 border border-line sm:flex-none">
               <ActionButton
                 onClick={() => setActiveTab('sessions')}
-                className={`rounded-lg px-4 py-1.5 text-xs font-bold transition-all ${activeTab === 'sessions' ? 'bg-brand text-bg shadow-glow-sm' : 'text-ink-muted'
+                className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-bold transition-all sm:flex-none sm:px-4 sm:text-xs ${activeTab === 'sessions' ? 'bg-brand text-bg shadow-glow-sm' : 'text-ink-muted'
                   }`}
               >
                 Sessions ({sessions.length})
               </ActionButton>
               <ActionButton
                 onClick={() => setActiveTab('sales')}
-                className={`rounded-lg px-4 py-1.5 text-xs font-bold transition-all ${activeTab === 'sales' ? 'bg-brand text-bg shadow-glow-sm' : 'text-ink-muted'
+                className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-bold transition-all sm:flex-none sm:px-4 sm:text-xs ${activeTab === 'sales' ? 'bg-brand text-bg shadow-glow-sm' : 'text-ink-muted'
                   }`}
               >
                 Snack Sales ({sales.length})
