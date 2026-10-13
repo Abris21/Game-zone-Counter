@@ -490,9 +490,9 @@ export default function CounterPage() {
               key={s.id}
               className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-3.5 text-xs font-semibold"
             >
-              <div className="flex items-center gap-2 truncate">
+              <div className="flex min-w-0 items-center gap-2">
                 <span className="text-warning">↺</span>
-                <span className="truncate">
+                <span className="break-words">
                   {st?.name || 'Unit'} ended · {s.games_count} {t('games')}
                 </span>
               </div>
@@ -533,13 +533,13 @@ export default function CounterPage() {
               >
                 {/* Station header */}
                 <div>
-                  <div className="flex items-start justify-between gap-1.5 sm:gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
                     <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-elevated text-xs sm:h-7 sm:w-7 sm:text-sm">
                         {st.kind === 'ps5' ? '🎮' : st.kind === 'ps4' ? '🕹️' : '🎱'}
                       </span>
                       <div className="min-w-0">
-                        <h2 className="max-w-full truncate font-display text-sm font-bold leading-tight text-ink sm:text-lg">
+                        <h2 className="break-words font-display text-sm font-bold leading-tight text-ink sm:text-lg">
                           {st.name}
                         </h2>
                         <span className="text-[9px] font-extrabold uppercase tracking-wider text-ink-dim sm:text-[10px]">
@@ -548,7 +548,7 @@ export default function CounterPage() {
                       </div>
                     </div>
 
-                    <div className="text-right">
+                    <div className="flex w-full items-center justify-between gap-2 text-left sm:block sm:w-auto sm:text-right">
                       <span
                         className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9px] font-bold sm:gap-1.5 sm:px-2.5 sm:text-[11px] ${openSession
                           ? isPaused
@@ -654,13 +654,13 @@ export default function CounterPage() {
                       <div className="grid grid-cols-2 gap-1 text-[10px] sm:grid-cols-3 sm:text-[11px]">
                         <ActionButton
                           onClick={() => setActiveSnackSession(openSession.id)}
-                          className="rounded-lg border border-line bg-surface-elevated py-1.5 px-1 font-semibold text-ink-muted hover:border-brand/40 hover:text-ink transition-colors truncate"
+                          className="min-h-10 whitespace-normal break-words rounded-lg border border-line bg-surface-elevated px-1 py-1.5 text-center font-semibold leading-tight text-ink-muted transition-colors hover:border-brand/40 hover:text-ink"
                         >
                           🍿 {t('Add snacks')}
                         </ActionButton>
                         <ActionButton
                           onClick={() => togglePause(openSession)}
-                          className={`rounded-lg border py-1.5 px-1 font-semibold transition-colors truncate ${isPaused
+                          className={`min-h-10 whitespace-normal break-words rounded-lg border px-1 py-1.5 text-center font-semibold leading-tight transition-colors ${isPaused
                             ? 'border-warning bg-warning/20 text-warning font-bold'
                             : 'border-line bg-surface-elevated text-ink-muted hover:border-brand/40'
                             }`}
@@ -669,7 +669,7 @@ export default function CounterPage() {
                         </ActionButton>
                         <ActionButton
                           onClick={() => setActiveFifaSession(openSession)}
-                          className={`rounded-lg border py-1.5 px-1 font-semibold transition-colors truncate ${openSession.fifa_extra_time_applied || openSession.fifa_penalties_applied
+                          className={`min-h-10 whitespace-normal break-words rounded-lg border px-1 py-1.5 text-center font-semibold leading-tight transition-colors ${openSession.fifa_extra_time_applied || openSession.fifa_penalties_applied
                             ? 'border-brand bg-brand/20 text-brand'
                             : 'border-line bg-surface-elevated text-ink-muted hover:border-brand/40'
                             }`}
@@ -678,7 +678,7 @@ export default function CounterPage() {
                         </ActionButton>
                       </div>
 
-                      <div className="pt-1 flex items-center justify-between text-[11px] text-ink-dim">
+                      <div className="flex flex-col items-start gap-1 pt-1 text-[11px] text-ink-dim sm:flex-row sm:items-center sm:justify-between">
                         <ActionButton
                           onClick={() => setActiveHandoverSession(openSession.id)}
                           className="hover:text-brand underline"
