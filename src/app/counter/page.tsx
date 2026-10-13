@@ -533,7 +533,7 @@ export default function CounterPage() {
               >
                 {/* Station header */}
                 <div>
-                  <div className="flex items-start justify-between gap-1.5 sm:gap-2">
+                  <div className={`flex gap-1.5 sm:gap-2 ${openSession ? 'flex-col sm:flex-row sm:items-start sm:justify-between' : 'items-start justify-between'}`}>
                     <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-elevated text-xs sm:h-7 sm:w-7 sm:text-sm">
                         {st.kind === 'ps5' ? '🎮' : st.kind === 'ps4' ? '🕹️' : '🎱'}
@@ -548,7 +548,7 @@ export default function CounterPage() {
                       </div>
                     </div>
 
-                    <div className="shrink-0 text-right">
+                    <div className={openSession ? 'flex w-full items-center justify-between gap-2 sm:w-auto sm:flex-col sm:items-end sm:gap-0' : 'shrink-0 text-right'}>
                       <span
                         className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9px] font-bold sm:gap-1.5 sm:px-2.5 sm:text-[11px] ${openSession
                           ? isPaused
@@ -567,7 +567,7 @@ export default function CounterPage() {
                         />
                         {openSession ? (isPaused ? 'Paused' : t('In use')) : t('Free')}
                       </span>
-                      <p className="mt-0.5 text-[10px] text-ink-muted sm:text-[11px]">
+                      <p className={`${openSession ? 'mt-0' : 'mt-0.5'} text-[10px] text-ink-muted sm:text-[11px]`}>
                         {etb(st.price)}/{t('game')}
                       </p>
                     </div>
@@ -625,7 +625,7 @@ export default function CounterPage() {
                   ) : (
                     <div className="space-y-2">
                       {/* Big Quick Touch Adjust Buttons */}
-                      <div className="grid grid-cols-3 gap-1.5 min-[420px]:gap-2">
+                      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 sm:gap-2">
                         <ActionButton
                           feedbackMs={110}
                           aria-label="Remove one game"
@@ -644,14 +644,14 @@ export default function CounterPage() {
                         </ActionButton>
                         <ActionButton
                           onClick={() => setActiveEndSession(openSession)}
-                          className="btn min-w-0 px-1 text-[10px] font-bold text-brand border border-brand/60 bg-brand/10 hover:bg-brand/20 sm:text-xs"
+                          className="btn col-span-2 min-w-0 px-1 text-[10px] font-bold text-brand border border-brand/60 bg-brand/10 hover:bg-brand/20 sm:col-span-1 sm:text-xs"
                         >
                           {t('End')}
                         </ActionButton>
                       </div>
 
                       {/* Micro actions: Snacks, Pause, FIFA rules, Handover */}
-                      <div className="grid grid-cols-3 gap-1 text-[9px] min-[420px]:text-[10px] sm:text-[11px]">
+                      <div className="grid grid-cols-2 gap-1.5 text-[10px] sm:grid-cols-3 sm:gap-1 sm:text-[11px]">
                         <ActionButton
                           onClick={() => setActiveSnackSession(openSession.id)}
                           className="min-h-10 whitespace-normal break-words rounded-lg border border-line bg-surface-elevated px-1 py-1.5 text-center font-semibold leading-tight text-ink-muted transition-colors hover:border-brand/40 hover:text-ink"
@@ -669,7 +669,7 @@ export default function CounterPage() {
                         </ActionButton>
                         <ActionButton
                           onClick={() => setActiveFifaSession(openSession)}
-                          className={`min-h-10 whitespace-normal break-words rounded-lg border px-1 py-1.5 text-center font-semibold leading-tight transition-colors ${openSession.fifa_extra_time_applied || openSession.fifa_penalties_applied
+                          className={`col-span-2 min-h-10 whitespace-normal break-words rounded-lg border px-1 py-1.5 text-center font-semibold leading-tight transition-colors sm:col-span-1 ${openSession.fifa_extra_time_applied || openSession.fifa_penalties_applied
                             ? 'border-brand bg-brand/20 text-brand'
                             : 'border-line bg-surface-elevated text-ink-muted hover:border-brand/40'
                             }`}
