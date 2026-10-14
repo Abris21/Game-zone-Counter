@@ -22,7 +22,7 @@ interface ReportData {
   by_method: Record<string, number>
   by_kind: Record<string, number>
   by_category: Record<string, number>
-  daily: { day: string; revenue: number; expenses: number }[]
+  daily: { day: string; game_revenue: number; snack_revenue: number; snack_cost: number; expenses: number }[]
 }
 
 interface Expense {
@@ -42,7 +42,16 @@ interface RecurringExpense {
 
 const CATEGORIES = ['Rent', 'Electricity', 'Maintenance', 'Salary', 'Internet', 'Other']
 
-const formatDate = (d: Date) => d.toLocaleDateString('en-CA')
+const formatDate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+const parsePositiveETB = (value: string): number | null => {
+  const amount = Number(value)
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 9_999_999_999.99) return null
+  const cents = amount * 100
+  if (Math.abs(cents - Math.round(cents)) > 1e-7) return null
+  return Math.round(cents) / 100
+}
 
 const getRange = (period: string): [string, string] => {
   const now = new Date()
@@ -100,7 +109,8 @@ export default function FinancePage() {
   })
 
   const hydrateLocalSnapshot = useCallback(() => {
-    const snapReport = getLocalSnapshot<ReportData>('finance_report')
+    // v2 includes daily snack revenue and COGS; don't show older incomplete daily totals offline.
+    const snapReport = getLocalSnapshot<ReportData>('finance_report_v2')
     const snapExpenses = getLocalSnapshot<Expense[]>('finance_expenses')
     const snapRecurring = getLocalSnapshot<RecurringExpense[]>('finance_recurring')
     const snapSnackStats = getLocalSnapshot<{ revenue: number; cost: number }>('finance_snack_stats')
@@ -121,8 +131,8 @@ export default function FinancePage() {
     hydrateLocalSnapshot()
     setBusy(true)
 
-    // Run scheduled recurring expense generator
-    await sb.rpc('post_recurring')
+    // Post due recurring expenses before reading the P&L.
+    const recurringPostRes = await sb.rpc('post_recurring')
 
     const [profitRes, expRes, recRes, snackRes, empRes] = await Promise.all([
       sb.rpc('profit_report', { p_from: fromDate, p_to: toDate }),
@@ -139,24 +149,41 @@ export default function FinancePage() {
     ])
 
     setBusy(false)
-    if (profitRes.error || expRes.error || recRes.error) {
-      setErr(msg(profitRes.error || expRes.error || recRes.error))
+    if (profitRes.error || expRes.error || snackRes.error) {
+      setErr(msg(profitRes.error || expRes.error || snackRes.error))
       return
     }
 
     const nextReport = profitRes.data as ReportData
+    const hasDailyPnlFields = Array.isArray(nextReport?.daily)
+      && nextReport.daily.length > 0
+      && nextReport.daily.every((day) =>
+        Number.isFinite(Number(day.game_revenue))
+        && Number.isFinite(Number(day.snack_revenue))
+        && Number.isFinite(Number(day.snack_cost))
+        && Number.isFinite(Number(day.expenses))
+      )
+    if (!hasDailyPnlFields) {
+      setErr('The finance database needs migration 018 before daily profit and loss can be shown accurately.')
+      return
+    }
     const nextExpenses = (expRes.data as Expense[]) || []
     const nextRecurring = (recRes.data as RecurringExpense[]) || []
     const nextSnackStats = (snackRes.data as { revenue: number; cost: number }) || { revenue: 0, cost: 0 }
     const nextEmployeeStats = (empRes.data as typeof employeeStats) || []
 
-    setErr('')
+    const warnings = [
+      recurringPostRes.error && `Could not post due recurring expenses: ${msg(recurringPostRes.error)}`,
+      recRes.error && `Could not load recurring expense settings: ${msg(recRes.error)}`,
+      empRes.error && `Could not load employee performance: ${msg(empRes.error)}`,
+    ].filter(Boolean)
+    setErr(warnings.join(' '))
     setReport(nextReport)
     setExpenses(nextExpenses)
     setRecurring(nextRecurring)
     setSnackStats(nextSnackStats)
     setEmployeeStats(nextEmployeeStats)
-    setLocalSnapshot('finance_report', nextReport)
+    setLocalSnapshot('finance_report_v2', nextReport)
     setLocalSnapshot('finance_expenses', nextExpenses)
     setLocalSnapshot('finance_recurring', nextRecurring)
     setLocalSnapshot('finance_snack_stats', nextSnackStats)
@@ -190,18 +217,20 @@ export default function FinancePage() {
   const totalExpenses = report?.expenses ?? 0
   const netProfit = calculateNetProfit(gameRevenue, snackRevenue, snackCost, totalExpenses)
 
-  const maxDaily = Math.max(1, ...(report?.daily ?? []).flatMap((x) => [x.revenue, x.expenses]))
+  const maxDaily = Math.max(1, ...(report?.daily ?? []).flatMap((x) => [
+    addMoney(x.game_revenue, x.snack_revenue),
+    addMoney(x.snack_cost, x.expenses),
+  ]))
 
   // CSV Export
   const exportCSV = () => {
     const rows = [
-      ['Date', 'Revenue', 'Expenses', 'Net'],
-      ...(report?.daily ?? []).map((x) => [
-        x.day,
-        x.revenue,
-        x.expenses,
-        subMoney(x.revenue, x.expenses),
-      ]),
+      ['Date', 'Game Revenue', 'Snack Revenue', 'Gross Revenue', 'Snack COGS', 'Operating Expenses', 'Net Profit'],
+      ...(report?.daily ?? []).map((x) => {
+        const gross = addMoney(x.game_revenue, x.snack_revenue)
+        const costs = addMoney(x.snack_cost, x.expenses)
+        return [x.day, x.game_revenue, x.snack_revenue, gross, x.snack_cost, x.expenses, subMoney(gross, costs)]
+      }),
       [],
       ['Expense Date', 'Category', 'Amount', 'Note'],
       ...expenses.map((x) => [x.expense_date, x.category, x.amount, x.note ?? '']),
@@ -426,25 +455,34 @@ export default function FinancePage() {
         {/* Daily Financial Chart / Bars */}
         {(report?.daily.length ?? 0) > 1 && (
           <div className="surface-card p-5 space-y-3">
-            <h3 className="font-display text-sm font-bold text-ink">Daily Revenue vs Expenses</h3>
+            <h3 className="font-display text-sm font-bold text-ink">Daily Revenue vs Total Costs</h3>
             <div className="max-h-60 overflow-y-auto space-y-2.5">
               {report!.daily.map((x) => (
                 <div key={x.day} className="space-y-1 text-xs">
                   <div className="flex justify-between font-medium">
                     <span className="text-ink">{x.day}</span>
-                    <span>
-                      <b className="text-brand">{etb(x.revenue)}</b> /{' '}
-                      <span className="text-bad">{etb(x.expenses)}</span>
-                    </span>
+                    {(() => {
+                      const revenue = addMoney(x.game_revenue, x.snack_revenue)
+                      const costs = addMoney(x.snack_cost, x.expenses)
+                      return (
+                        <span className="flex flex-wrap justify-end gap-x-2 text-right">
+                          <b className="text-brand">Revenue {etb(revenue)}</b>
+                          <span className="text-bad">Costs {etb(costs)}</span>
+                          <span className={subMoney(revenue, costs) >= 0 ? 'text-ok' : 'text-bad'}>
+                            Net {etb(subMoney(revenue, costs))}
+                          </span>
+                        </span>
+                      )
+                    })()}
                   </div>
                   <div className="flex gap-1 h-2 rounded-full overflow-hidden bg-surface-elevated">
                     <div
                       className="bg-brand rounded-full transition-all"
-                      style={{ width: `${(x.revenue / maxDaily) * 100}%` }}
+                      style={{ width: `${(addMoney(x.game_revenue, x.snack_revenue) / maxDaily) * 100}%` }}
                     />
                     <div
                       className="bg-bad rounded-full transition-all"
-                      style={{ width: `${(x.expenses / maxDaily) * 100}%` }}
+                      style={{ width: `${(addMoney(x.snack_cost, x.expenses) / maxDaily) * 100}%` }}
                     />
                   </div>
                 </div>
@@ -496,11 +534,17 @@ export default function FinancePage() {
             <form
               onSubmit={(e) => {
                 e.preventDefault()
+                const amount = parsePositiveETB(newExp.amount)
+                if (amount === null) {
+                  setErr('Enter an expense amount greater than zero with no more than two decimal places.')
+                  return
+                }
+                setErr('')
                 handleAction(
                   sb.from('expenses').insert({
                     zone_id: profile!.zone_id,
                     category: newExp.category,
-                    amount: Number(newExp.amount),
+                    amount,
                     expense_date: newExp.expense_date,
                     note: newExp.note.trim() || null,
                   }),
@@ -521,14 +565,16 @@ export default function FinancePage() {
               <input
                 required
                 type="number"
-                min="0"
-                step="any"
+                min="0.01"
+                max="9999999999.99"
+                step="0.01"
                 value={newExp.amount}
                 onChange={(e) => setNewExp({ ...newExp, amount: e.target.value })}
                 placeholder="Amount (ETB)"
                 className="inp text-xs font-bold"
               />
               <input
+                required
                 type="date"
                 value={newExp.expense_date}
                 onChange={(e) => setNewExp({ ...newExp, expense_date: e.target.value })}
@@ -589,11 +635,17 @@ export default function FinancePage() {
             <form
               onSubmit={(e) => {
                 e.preventDefault()
+                const amount = parsePositiveETB(newRec.amount)
+                if (amount === null) {
+                  setErr('Enter a recurring expense amount greater than zero with no more than two decimal places.')
+                  return
+                }
+                setErr('')
                 handleAction(
                   sb.from('recurring_expenses').insert({
                     zone_id: profile!.zone_id,
                     category: newRec.category,
-                    amount: Number(newRec.amount),
+                    amount,
                     day_of_month: Number(newRec.day_of_month),
                   }),
                   () => setNewRec({ ...newRec, amount: '' })
@@ -613,8 +665,9 @@ export default function FinancePage() {
               <input
                 required
                 type="number"
-                min="0"
-                step="any"
+                min="0.01"
+                max="9999999999.99"
+                step="0.01"
                 value={newRec.amount}
                 onChange={(e) => setNewRec({ ...newRec, amount: e.target.value })}
                 placeholder="Amount (ETB)"
