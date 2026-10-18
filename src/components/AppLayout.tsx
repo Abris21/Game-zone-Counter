@@ -94,12 +94,12 @@ export default function AppLayout({
     { href: '/manage', label: 'Units & Staff', icon: '👥' },
     { href: '/history', label: 'History & Voids', icon: '📜' },
     { href: '/settings', label: 'Zone Rules', icon: '⚙️' },
-    { href: '/audit', label: 'Audit Log', icon: '🛡️' },
     { href: '/account', label: 'Account', icon: '👤' },
   ]
 
   const superAdminLinks = [
     { href: '/super', label: 'Game Zones', icon: '🏢' },
+    { href: '/audit', label: 'Audit Log', icon: '🛡️' },
     { href: '/account', label: 'Account', icon: '👤' },
   ]
 

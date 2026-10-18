@@ -20,7 +20,7 @@ interface AuditLogItem {
 
 export default function AuditPage() {
   const router = useRouter()
-  const { user, profile, zone, loading } = useAuthGuard(['admin', 'super_admin'])
+  const { user, profile, zone, loading } = useAuthGuard(['super_admin'])
 
   const [logs, setLogs] = useState<AuditLogItem[]>([])
   const [userNames, setUserNames] = useState<Record<string, string>>({})
@@ -76,13 +76,19 @@ export default function AuditPage() {
     filterAction ? l.action.toLowerCase().includes(filterAction.toLowerCase()) : true
   )
 
-  if (loading && !hasLocalSnapshot) {
+  if (loading || profile?.role !== 'super_admin') {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-bg px-4 text-ink">
         <div className="surface-card w-full max-w-sm p-6 text-center shadow-2xl shadow-brand/10">
-          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-3 border-brand border-t-transparent" />
-          <p className="font-display text-lg font-bold text-ink">Loading admin audit…</p>
-          <p className="mt-1 text-xs text-ink-muted">Syncing recent activity and zone records.</p>
+          {loading ? (
+            <>
+              <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-3 border-brand border-t-transparent" />
+              <p className="font-display text-lg font-bold text-ink">Loading admin audit…</p>
+              <p className="mt-1 text-xs text-ink-muted">Syncing recent activity and zone records.</p>
+            </>
+          ) : (
+            <p className="font-display text-lg font-bold text-ink">Audit access unavailable.</p>
+          )}
         </div>
       </div>
     )
